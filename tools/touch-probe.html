@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Count &amp; Tune 터치 검증</title>
+<style>
+/* Layout: compact control strip on top, one large touch surface below, log at the bottom */
+:root{
+  --bg:#f3f4f6; --panel:#ffffff; --fg:#1b2230; --muted:#5d6878; --line:#d9dde4;
+  --pen:#d6452f; --finger:#2f6fd6; --palm:#9a7b1c; --ok:#1f8a4c; --bad:#c23a2b;
+  --surface:#fbfbfc;
+  --sans: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151b; --panel:#1b2029; --fg:#e7eaf0; --muted:#97a1b0; --line:#2c3340;
+  --pen:#ff7a5f; --finger:#6ea0ff; --palm:#e0bf55; --ok:#4fc283; --bad:#ff6b5b;
+  --surface:#161a21; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151b; --panel:#1b2029; --fg:#e7eaf0; --muted:#97a1b0; --line:#2c3340;
+  --pen:#ff7a5f; --finger:#6ea0ff; --palm:#e0bf55; --ok:#4fc283; --bad:#ff6b5b;
+  --surface:#161a21; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;
+  -webkit-user-select:none;user-select:none}
+h1{font-size:17px;margin:0;text-wrap:balance}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.hint{color:var(--muted);font-size:13px;margin:2px 0 0;max-width:70ch}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.box h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;font-weight:600}
+.stats{display:grid;grid-template-columns:auto auto;gap:2px 14px;font-size:13px;font-variant-numeric:tabular-nums}
+.stats b{font-weight:600;text-align:right}
+.warn b{color:var(--bad)}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:2px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500}
+td:first-child,th:first-child{text-align:left}
+button{font:inherit;font-size:14px;padding:7px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button[aria-pressed="true"]{background:var(--finger);border-color:var(--finger);color:#fff}
+button:focus-visible{outline:2px solid var(--finger);outline-offset:2px}
+.status{font-size:14px;font-variant-numeric:tabular-nums}
+.status .pen{color:var(--pen);font-weight:600}
+.status .fin{color:var(--finger);font-weight:600}
+#surface{position:relative;flex:1 1 auto;min-height:52vh;border:1px dashed var(--line);border-radius:8px;
+  background:var(--surface);touch-action:none;overflow:hidden}
+#surface canvas{position:absolute;inset:0;width:100%;height:100%}
+#empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:14px;pointer-events:none;text-align:center;padding:16px}
+#log{font-family:var(--mono);font-size:11px;line-height:1.45;max-height:22vh;overflow:auto;margin:0;white-space:pre;color:var(--muted)}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>Count &amp; Tune 터치 검증</h1>
+    <p class="hint">iPad Safari에서 열어 주세요. 왼손 손가락 1~3개를 아래 영역에 가만히 올린 채 Pencil을 찍거나 그어 봅니다. 손가락 이벤트가 끊기는지, 펜 다운 순간에 손가락 수가 맞게 잡히는지 확인하는 페이지입니다.</p>
+  </div>
+  <div class="row">
+    <button id="reset" type="button">기록 초기화</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="box">
+    <h2>정답 손가락 수 (시행 기록용)</h2>
+    <div class="row" role="group" aria-label="정답 손가락 수">
+      <button type="button" data-target="0" aria-pressed="false" id="t0">0</button>
+      <button type="button" data-target="1" aria-pressed="true" id="t1">1</button>
+      <button type="button" data-target="2" aria-pressed="false" id="t2">2</button>
+      <button type="button" data-target="3" aria-pressed="false" id="t3">3</button>
+    </div>
+    <table style="margin-top:8px" aria-label="펜 다운 정확도">
+      <thead><tr><th>정답</th><th>시행</th><th>일치</th><th>비율</th></tr></thead>
+      <tbody id="acc"></tbody>
+    </table>
+  </div>
+  <div class="box">
+    <h2>핵심 지표</h2>
+    <div class="stats">
+      <span>펜 다운 횟수</span><b id="sPenDown">0</b>
+      <span>펜 접촉 중 손가락 move 수신</span><b id="sFingerMoveDuringPen">0</b>
+      <span>펜 접촉 중 새 손가락 down 수신</span><b id="sFingerDownDuringPen">0</b>
+      <span class="warn">손가락 pointercancel</span><b id="sTouchCancel" class="warn">0</b>
+      <span>펜 pointercancel</span><b id="sPenCancel">0</b>
+      <span>touchcancel (TouchEvent)</span><b id="sTE">0</b>
+      <span>큰 접촉(손바닥 의심) down</span><b id="sPalm">0</b>
+    </div>
+  </div>
+  <div class="box">
+    <h2>지금 상태</h2>
+    <div class="status" id="now">펜 <span class="pen">떨어짐</span> · 손가락 <span class="fin">0</span>개 (정지 0)</div>
+    <div class="status" id="te" style="margin-top:4px;color:var(--muted)">TouchEvent 기준: direct 0 · stylus 0</div>
+    <div class="legend" style="margin-top:8px">
+      <span><i class="dot" style="background:var(--finger)"></i>손가락</span>
+      <span><i class="dot" style="background:var(--palm)"></i>큰 접촉</span>
+      <span><i class="dot" style="background:var(--pen)"></i>펜</span>
+    </div>
+  </div>
+</div>
+
+<div id="surface">
+  <canvas id="ink"></canvas>
+  <canvas id="overlay"></canvas>
+  <div id="empty">여기에 손가락을 올리고 Pencil로 찍거나 그어 보세요</div>
+</div>
+
+<div class="box">
+  <h2>이벤트 로그 (최근 60줄, 최신이 위)</h2>
+  <pre id="log"></pre>
+</div>
+
+<script>
+(function(){
+  const STILL_PX = 12, STILL_MS = 120, PALM_PX = 60;
+  const surface = document.getElementById('surface');
+  const ink = document.getElementById('ink'), ov = document.getElementById('overlay');
+  const ictx = ink.getContext('2d'), octx = ov.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  const active = new Map(); // pointerId -> state
+  let target = 1, penDown = false, lastPen = null;
+  const S = {penDown:0, fMovePen:0, fDownPen:0, touchCancel:0, penCancel:0, te:0, palm:0};
+  const acc = {0:[0,0],1:[0,0],2:[0,0],3:[0,0]};
+  const logLines = [];
+  const t0 = performance.now();
+
+  function size(){
+    const r = surface.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    for (const c of [ink, ov]){ c.width = Math.round(r.width*d); c.height = Math.round(r.height*d); c.getContext('2d').setTransform(d,0,0,d,0,0); }
+  }
+  size(); window.addEventListener('resize', size);
+
+  function pos(e){ const r = surface.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  function log(s){ logLines.unshift(((performance.now()-t0)/1000).toFixed(3).padStart(8)+'  '+s); if (logLines.length>60) logLines.length=60; $('log').textContent = logLines.join('\n'); }
+  function fingers(){ let n=0, still=0; const now=performance.now();
+    for (const p of active.values()) if (p.type==='touch'){ n++; if (!p.moved && now-p.t>=STILL_MS) still++; }
+    return [n, still]; }
+
+  function render(){
+    octx.clearRect(0,0,ov.width,ov.height);
+    for (const p of active.values()){
+      const big = p.type==='touch' && Math.max(p.w,p.h) >= PALM_PX;
+      const col = p.type==='pen' ? css('--pen') : big ? css('--palm') : css('--finger');
+      const r = p.type==='pen' ? 8 : Math.max(18, Math.max(p.w,p.h)/2);
+      octx.beginPath(); octx.arc(p.x,p.y,r,0,Math.PI*2);
+      octx.strokeStyle = col; octx.lineWidth = p.moved ? 1.5 : 3; octx.stroke();
+      octx.fillStyle = col; octx.font = '12px ' + css('--mono');
+      octx.fillText(p.type==='touch' ? `${Math.round(p.w)}×${Math.round(p.h)}` : 'pen', p.x+r+4, p.y-4);
+    }
+    const [n, still] = fingers();
+    $('now').innerHTML = `펜 <span class="pen">${penDown?'닿음':'떨어짐'}</span> · 손가락 <span class="fin">${n}</span>개 (정지 ${still})`;
+    $('sPenDown').textContent=S.penDown; $('sFingerMoveDuringPen').textContent=S.fMovePen;
+    $('sFingerDownDuringPen').textContent=S.fDownPen; $('sTouchCancel').textContent=S.touchCancel;
+    $('sPenCancel').textContent=S.penCancel; $('sTE').textContent=S.te; $('sPalm').textContent=S.palm;
+    $('acc').innerHTML = [0,1,2,3].map(k=>{ const [t,c]=acc[k]; return `<tr><td>${k}</td><td>${t}</td><td>${c}</td><td>${t?Math.round(100*c/t)+'%':'–'}</td></tr>`; }).join('');
+    $('empty').hidden = S.penDown>0 || active.size>0;
+  }
+
+  surface.addEventListener('pointerdown', e=>{
+    const [x,y] = pos(e);
+    const p = {type:e.pointerType, x, y, x0:x, y0:y, t:performance.now(), w:e.width||0, h:e.height||0, moved:false};
+    active.set(e.pointerId, p);
+    try{ surface.setPointerCapture(e.pointerId); }catch(_){}
+    if (e.pointerType==='pen'){
+      const [n, still] = fingers();
+      penDown = true; S.penDown++; acc[target][0]++; if (still===target) acc[target][1]++;
+      lastPen = [x,y];
+      log(`P down pen     id=${e.pointerId} fingers=${n} still=${still} target=${target} ${still===target?'OK':'MISS'}`);
+    } else {
+      if (penDown) S.fDownPen++;
+      if (Math.max(p.w,p.h) >= PALM_PX) S.palm++;
+      log(`P down ${e.pointerType.padEnd(6)} id=${e.pointerId} ${Math.round(x)},${Math.round(y)} ${Math.round(p.w)}×${Math.round(p.h)}`);
+    }
+    render();
+  });
+
+  surface.addEventListener('pointermove', e=>{
+    const p = active.get(e.pointerId); if (!p) return;
+    const [x,y] = pos(e); p.x=x; p.y=y; p.w=e.width||p.w; p.h=e.height||p.h;
+    if (Math.hypot(x-p.x0, y-p.y0) > STILL_PX) p.moved = true;
+    if (p.type==='pen' && lastPen){
+      ictx.strokeStyle = css('--pen'); ictx.lineWidth = 2; ictx.lineCap='round';
+      ictx.beginPath(); ictx.moveTo(lastPen[0],lastPen[1]); ictx.lineTo(x,y); ictx.stroke(); lastPen=[x,y];
+    } else if (p.type==='touch' && penDown) S.fMovePen++;
+    render();
+  });
+
+  function end(e, kind){
+    const p = active.get(e.pointerId);
+    if (kind==='cancel'){ if (e.pointerType==='pen') S.penCancel++; else S.touchCancel++; }
+    if (p && p.type==='pen'){ penDown=false; lastPen=null; }
+    active.delete(e.pointerId);
+    log(`P ${kind.padEnd(6)} ${e.pointerType.padEnd(6)} id=${e.pointerId}`);
+    render();
+  }
+  surface.addEventListener('pointerup', e=>end(e,'up'));
+  surface.addEventListener('pointercancel', e=>end(e,'cancel'));
+
+  // TouchEvent cross-check (Safari exposes touchType: "direct" | "stylus")
+  function teCount(e){ let d=0,s=0; for (const t of e.touches){ if (t.touchType==='stylus') s++; else d++; } $('te').textContent=`TouchEvent 기준: direct ${d} · stylus ${s}`; }
+  surface.addEventListener('touchstart', e=>{ e.preventDefault(); teCount(e); }, {passive:false});
+  surface.addEventListener('touchmove', e=>{ e.preventDefault(); teCount(e); }, {passive:false});
+  surface.addEventListener('touchend', teCount);
+  surface.addEventListener('touchcancel', e=>{ S.te++; teCount(e); log('T touchcancel'); render(); });
+
+  document.querySelectorAll('[data-target]').forEach(b=>b.addEventListener('click',()=>{
+    target = +b.dataset.target;
+    document.querySelectorAll('[data-target]').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  }));
+  $('reset').addEventListener('click',()=>{
+    for (const k in S) S[k]=0; for (const k in acc) acc[k]=[0,0];
+    logLines.length=0; $('log').textContent=''; ictx.clearRect(0,0,ink.width,ink.height); render();
+  });
+  setInterval(render, 150); // refresh "still" status while fingers rest
+  render();
+})();
+</script>
+</body>
+</html>

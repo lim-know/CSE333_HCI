@@ -1,0 +1,24 @@
+# 참가자 데이터 (절대 커밋 금지)
+data/raw/
+data/pilot/
+*.participant.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# 분석 결과물 (필요하면 따로 공유)
+analysis/output/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Node (혹시 쓰게 되면)
+node_modules/

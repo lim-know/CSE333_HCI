@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Count &amp; Tune Prototype</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 단계별 지시 배너 (task.js) -->
+  <header id="cue-banner">실험 준비 중</header>
+
+  <!-- C1·C2용 툴바와 슬라이더 (conditions.js) -->
+  <div id="toolbar" hidden></div>
+
+  <!-- 필기 영역 -->
+  <canvas id="canvas"></canvas>
+
+  <!-- 모듈 로딩 순서: logger → recognition → conditions → task -->
+  <script src="js/logger.js"></script>
+  <script src="js/recognition.js"></script>
+  <script src="js/conditions.js"></script>
+  <script src="js/task.js"></script>
+</body>
+</html>
