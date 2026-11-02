@@ -1,0 +1,4 @@
+script_id,step_id,exp,step_type,task_type,language,cue_text,target_slot,target_size,on_preset,target_x,target_y,text
+exp1,m01,exp1,size_only,line,,지금 펜 2.0pt,,2.0,1,400,300,
+exp1,m02,exp1,size_only,line,,지금 펜 3.0pt,,3.0,0,400,300,
+exp1,m03,exp1,size_only,line,,지금 펜 6.0pt,,6.0,0,400,300,

@@ -27,11 +27,24 @@
 실험 전 [장비 세팅 체크리스트](docs/device-setup.md)를 꼭 확인하세요 (3·4손가락 제스처 끄기 등).
 
 ### 분석
-```
+Python 3.12 기준이며, 패키지 버전은 `analysis/requirements.txt`에 고정되어 있습니다. 저장소 루트에서 실행합니다.
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r analysis\requirements.txt
 cd analysis
-pip install -r requirements.txt
-python analyze.py ../data/sample/sample_log.csv
+..\.venv\Scripts\python validate_log.py ..\data\sample
+..\.venv\Scripts\python analyze.py ..\data\sample
 ```
+
+| 파일 | 용도 |
+|---|---|
+| `validate_log.py` | 세션 직후 로그 점검 (누락, 순서 오류 등) |
+| `build_steps.py` | 원시 이벤트로 단계별 분석 표 생성 |
+| `analyze.py` | 로그 점검 후 기술통계 출력 |
+| `replay_thresholds.py` | 정지 임계값을 바꿔 재계산 |
+| `make_sample_data.py` | 테스트용 가짜 데이터 생성 |
+
+테스트는 `analysis` 폴더에서 `..\.venv\Scripts\python -m unittest discover -s tests`로 실행합니다.
 
 ## 작업 규칙
 

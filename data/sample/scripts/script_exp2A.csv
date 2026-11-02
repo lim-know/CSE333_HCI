@@ -1,0 +1,7 @@
+script_id,step_id,exp,step_type,task_type,language,cue_text,target_slot,target_size,on_preset,target_x,target_y,text
+exp2A,s01,exp2,switch_only,underline,,노란 형광펜,2,,,400,300,
+exp2A,s02,exp2,size_only,underline,,지금 펜 2.0pt,,2.0,1,400,300,
+exp2A,s03,exp2,switch_size,circle,,빨간 펜 2.0pt,3,2.0,1,400,300,
+exp2A,s04,exp2,copy,copy,ko,아래 문장을 따라 쓰세요,,,,,,가설 검정
+exp2A,s05,exp2,switch_size,highlight,,노란 형광펜 4.0pt,2,4.0,1,400,300,
+exp2A,s06,exp2,copy,copy,en,아래 문장을 따라 쓰세요,,,,,,sample data
