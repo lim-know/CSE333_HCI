@@ -2,6 +2,16 @@
 data/raw/
 data/pilot/
 *.participant.csv
+# 다른 폴더에 둬도 커밋되지 않게 막는다. data/sample 의 가짜 데이터만 예외.
+events_*.csv
+sessions.csv
+participants.csv
+questionnaire.csv
+steps.csv
+!data/sample/events/events_*.csv
+!data/sample/sessions.csv
+!data/sample/participants.csv
+!data/sample/questionnaire.csv
 
 # Python
 __pycache__/

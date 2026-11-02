@@ -1,0 +1,3 @@
+script_id,step_id,exp,step_type,task_type,language,cue_text,target_slot,target_size,on_preset,target_x,target_y,text
+practice,p01,exp2,switch_only,underline,,노란 형광펜,2,,,400,300,
+practice,p02,exp2,switch_size,circle,,빨간 펜 1.0pt,3,1.0,1,400,300,

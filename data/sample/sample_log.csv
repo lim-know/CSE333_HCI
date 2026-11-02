@@ -1,6 +1,0 @@
-participant,condition,phase,exp,trial,step_type,target_slot,target_size,t_cue,t_first_correct,final_slot,final_size,n_actions,error_type,n_unintended,n_strokes
-P00,C1,practice,exp2,1,switch_only,2,1.0,1000,3100,2,1.0,2,none,0,3
-P00,C1,main,exp2,1,switch_size,3,2.0,5000,8200,3,2.0,4,none,0,4
-P00,C1,main,exp2,2,copy,,,9000,9000,1,1.0,0,none,0,22
-P00,C3,main,exp2,1,switch_size,3,2.0,5000,6400,3,2.1,1,none,0,4
-P00,C3,main,exp2,2,copy,,,9000,9000,1,1.0,0,unintended_activation,1,21
