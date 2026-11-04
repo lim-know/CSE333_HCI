@@ -6,6 +6,7 @@
 로그를 먼저 점검하고, 오류가 있으면 분석하지 않는다.
 현재는 파일럿용 기술통계만 낸다. 로그 형식은 docs/log-schema.md 참고.
 - 본실험 계획: RM-ANOVA (전환 시간), Friedman (NASA-TLX), TOST (H2 동등성, H3 비열등성)
+- 주 지표 제안: 지시 -> 첫 정답 획 시간(time_cue_to_correct), 단계 전체 시간(duration)은 보조
 """
 from __future__ import annotations
 
@@ -38,9 +39,9 @@ def switching_summary(steps: pd.DataFrame) -> pd.DataFrame:
 
 
 def activation_summary(steps: pd.DataFrame) -> pd.DataFrame:
-    """따라쓰기 구간의 의도치 않은 발동을 펜 다운 100회당으로 계산한다."""
+    """따라쓰기 구간의 의도치 않은 발동을 필기 영역 펜 다운 100회당으로 계산한다."""
     copy = steps[(steps["phase"] == "main") & (steps["step_type"] == "copy")]
-    table = copy.groupby(["condition", "language"]).agg(
+    table = copy.groupby("condition").agg(
         n_pen_downs=("n_pen_downs", "sum"),
         n_unintended=("n_unintended", "sum"),
     )
