@@ -12,7 +12,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from logdata import load_dataset, parse_detail
+from logdata import canvas_pen_downs, load_dataset, parse_detail
 
 # 잠정값: 파일럿 후 확정 (docs/log-schema.md "합의할 것" 참고)
 SIZE_TOL_RATIO = 1.10   # 목표 굵기 대비 이 비율 안이면 정답
@@ -71,7 +71,7 @@ def _summarize_step(block: pd.DataFrame, cue: pd.Series, spec: pd.Series, order_
     t_end = end_rows["t_event"].iloc[-1] if len(end_rows) else np.nan
     outcome = parse_detail(end_rows["detail"].iloc[-1]).get("outcome", "unknown") if len(end_rows) else "missing"
 
-    pen_downs = step[(step["event"] == "pointerdown") & (step["pointer_type"] == "pen")]
+    pen_downs = step[canvas_pen_downs(step)]
     n_activations = int((step["event"] == "activation").sum())
     # 손가락이 닿아 있는데 정지로 판정되지 않은 펜 다운: 전환 단계에서만 인식 실패 후보로 본다.
     possible_missed = 0 if is_copy else int(((pen_downs["n_touch"] >= 1) & (pen_downs["n_still"] == 0)).sum())
@@ -97,6 +97,7 @@ def _summarize_step(block: pd.DataFrame, cue: pd.Series, spec: pd.Series, order_
         "target_slot": target_slot,
         "target_size": target_size,
         "on_preset": spec["on_preset"],
+        "time_limit_ms": spec["time_limit_ms"],
         "start_slot": cue["slot"],
         "start_size": cue["size"],
         "outcome": outcome,

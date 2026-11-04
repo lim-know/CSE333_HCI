@@ -9,8 +9,9 @@
 - P00 C3 exp2 s03: 잘못된 슬롯으로 먼저 쓰고 수정
 - P00 C3 exp2 s04(copy): 슬롯은 그대로인데 획이 굵기 조절로 먹힌 오작동
 - P00 C3 exp2 s05: 손가락이 움직여 인식 실패(후보) 후 재시도
-- P01 C3 exp2 s05: 시간 초과로 끝내 못 맞춤
+- P01 C3 exp2 s05: 시간 제한까지 못 맞춤 (timeout)
 - P01 C2 exp2 s02: 터치 pointercancel
+단계는 모두 완료 버튼(source=ui 펜 탭)으로 끝나고, timeout 단계만 버튼 없이 끝난다.
 """
 from __future__ import annotations
 
@@ -25,8 +26,10 @@ from logdata import (
 )
 
 SEED = 333
-COPY_STROKES = {"ko": 14, "en": 8}   # 형식 테스트용 임의 값, 실측치 아님
+COPY_STROKES = 14   # 형식 테스트용 임의 값, 실측치 아님
 SPEED = {"C1": 1.0, "C2": 0.9, "C3": 0.75}
+TIME_LIMIT_MS = {"switch": 20000, "copy": 60000}   # 임의 값. 실제 값은 스크립트 설계에서 정한다
+DONE_BUTTON = (1200, 40)
 
 
 def _step(step_id, exp, step_type, task_type, slot, size, language="", text="", on_preset=""):
@@ -40,6 +43,7 @@ def _step(step_id, exp, step_type, task_type, slot, size, language="", text="", 
         "language": language, "cue_text": cue_text, "target_slot": slot, "target_size": size,
         "on_preset": on_preset, "target_x": 400 if step_type != "copy" else "",
         "target_y": 300 if step_type != "copy" else "", "text": text,
+        "time_limit_ms": TIME_LIMIT_MS["copy" if step_type == "copy" else "switch"],
     }
 
 
@@ -50,7 +54,7 @@ def _exp2_steps(words: tuple[str, str]) -> list[dict]:
         _step("s03", "exp2", "switch_size", "circle", 3, 2.0, on_preset=1),
         _step("s04", "exp2", "copy", "copy", "", "", language="ko", text=words[0]),
         _step("s05", "exp2", "switch_size", "highlight", 2, 4.0, on_preset=1),
-        _step("s06", "exp2", "copy", "copy", "", "", language="en", text=words[1]),
+        _step("s06", "exp2", "copy", "copy", "", "", language="ko", text=words[1]),
     ]
 
 
@@ -65,9 +69,9 @@ def make_scripts() -> dict[str, list[dict]]:
             _step("m02", "exp1", "size_only", "line", "", 3.0, on_preset=0),
             _step("m03", "exp1", "size_only", "line", "", 6.0, on_preset=0),
         ],
-        "exp2A": _exp2_steps(("가설 검정", "sample data")),
-        "exp2B": _exp2_steps(("표본 평균", "test result")),
-        "exp2C": _exp2_steps(("실험 설계", "main effect")),
+        "exp2A": _exp2_steps(("가설 검정", "표본 크기")),
+        "exp2B": _exp2_steps(("표본 평균", "검정 결과")),
+        "exp2C": _exp2_steps(("실험 설계", "주 효과")),
     }
 
 
@@ -96,10 +100,16 @@ class BlockLog:
         row.update(fields)
         self.rows.append(row)
 
-    def pointer(self, event: str, kind: str, pid: int, x: float, y: float, **fields) -> None:
+    def pointer(self, event: str, kind: str, pid: int, x: float, y: float, source: str = "canvas", **fields) -> None:
         size = 1 if kind == "pen" else 30
-        self.emit(event, pointer_id=pid, pointer_type=kind, x=round(x, 1), y=round(y, 1),
+        self.emit(event, source=source, pointer_id=pid, pointer_type=kind, x=round(x, 1), y=round(y, 1),
                   width=size, height=size, buttons=int(event != "pointerup"), **fields)
+
+    def done_tap(self) -> None:
+        """완료 버튼을 펜으로 누른다. 필기 영역 밖이라 source=ui."""
+        self.wait(350)
+        self.pointer("pointerdown", "pen", 1, *DONE_BUTTON, source="ui", n_touch=0, n_still=0)
+        self.pointer("pointerup", "pen", 1, *DONE_BUTTON, source="ui")
 
     def ink(self, moves: int = 2) -> None:
         self.pointer("pointerdown", "pen", 1, 400, 300, n_touch=0, n_still=0)
@@ -112,8 +122,8 @@ class BlockLog:
 
     def toolbar(self, slot: int) -> None:
         self.wait(450)
-        self.pointer("pointerdown", "pen", 1, 80 + 60 * slot, 40, n_touch=0, n_still=0)
-        self.pointer("pointerup", "pen", 1, 80 + 60 * slot, 40)
+        self.pointer("pointerdown", "pen", 1, 80 + 60 * slot, 40, source="ui", n_touch=0, n_still=0)
+        self.pointer("pointerup", "pen", 1, 80 + 60 * slot, 40, source="ui")
         self.emit("toolbar_tap", source="toolbar", slot=slot, size=self.size)
         self.slot = slot
         self.emit("slot_change", source="toolbar", slot=slot, size=self.size)
@@ -181,6 +191,7 @@ def _number(value) -> float | None:
 def _run_step(log: BlockLog, condition: str, spec: dict, participant: str) -> None:
     log.step_id = spec["step_id"]
     log.emit("cue_shown", slot=log.slot, size=log.size, detail=f"text_len={len(spec['cue_text'])}")
+    t_cue = log.t
     log.wait(500)
     case = (participant, condition, spec["exp"], spec["step_id"])
     outcome = "completed"
@@ -188,7 +199,7 @@ def _run_step(log: BlockLog, condition: str, spec: dict, participant: str) -> No
     if spec["step_type"] == "copy":
         if case == ("P00", "C3", "exp2", "s04"):
             log.gesture(log.slot, None, None)   # 손이 닿아 획이 굵기 조절로 먹힘, 슬롯 변화 없음
-        for _ in range(COPY_STROKES[spec["language"]]):
+        for _ in range(COPY_STROKES):
             log.ink(moves=1)
             log.wait(120)
     else:
@@ -209,13 +220,15 @@ def _run_step(log: BlockLog, condition: str, spec: dict, participant: str) -> No
             log.gesture(1, 1, None)
             log.wait(300)
             log.ink()
-            log.wait(9000)
             outcome = "timeout"
         else:
             log.switch(condition, slot, size)
             log.wait(250)
             log.ink()
-    log.wait(150)
+    if outcome == "timeout":
+        log.t = max(log.t, t_cue + spec["time_limit_ms"])   # 제한 시간이 되면 버튼 없이 끝난다
+    else:
+        log.done_tap()
     log.emit("step_end", slot=log.slot, size=log.size, detail=f"outcome={outcome}")
     log.step_id = ""
     log.wait(300)
@@ -226,7 +239,8 @@ def _run_block(participant, session_id, block_no, condition, phase, script_id, s
     meta = {"session_id": session_id, "participant": participant, "block": block_no,
             "condition": condition, "phase": phase, "exp": exp, "script_id": script_id}
     log = BlockLog(meta, rng, SPEED[condition])
-    log.emit("block_start", detail=f"build=sample;still_px=12;still_ms=120;epoch_ms={1793000000000 + block_no};order={order}")
+    log.emit("block_start", detail=(f"build=sample;still_px=12;still_ms=120;touch_to_pen_ms=none;"
+                                    f"epoch_ms={1793000000000 + block_no};order={order}"))
     for spec in steps:
         _run_step(log, condition, spec, participant)
     log.emit("block_end")
@@ -261,7 +275,7 @@ def main(out: str) -> None:
         })
         participants.append({
             "participant": participant, "handedness": "right", "native_language": "ko",
-            "note_language": "mixed", "english_proficiency": 3, "tablet_note_months": 24,
+            "note_language": "mixed", "tablet_note_months": 24,
         })
         block_no = 0
         for condition in order:

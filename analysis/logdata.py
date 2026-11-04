@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 EVENT_COLUMNS = [
     "schema_version", "session_id", "participant", "block", "condition", "phase",
@@ -17,14 +17,14 @@ EVENT_COLUMNS = [
 SCRIPT_COLUMNS = [
     "script_id", "step_id", "exp", "step_type", "task_type", "language", "cue_text",
     "target_slot", "target_size", "on_preset", "target_x", "target_y", "text",
+    "time_limit_ms",
 ]
 SESSION_COLUMNS = [
     "session_id", "participant", "condition_order", "script_variant", "date",
     "device", "browser", "windows", "screen_w", "screen_h", "dpr", "experimenter", "notes",
 ]
 PARTICIPANT_COLUMNS = [
-    "participant", "handedness", "native_language", "note_language",
-    "english_proficiency", "tablet_note_months",
+    "participant", "handedness", "native_language", "note_language", "tablet_note_months",
 ]
 QUESTIONNAIRE_COLUMNS = ["participant", "condition", "item", "value"]
 
@@ -38,9 +38,11 @@ CONDITIONS = {"C1", "C2", "C3"}
 PHASES = {"practice", "main"}
 EXPS = {"exp1", "exp2"}
 STEP_TYPES = {"switch_only", "size_only", "switch_size", "copy"}
-LANGUAGES = {"ko", "en"}
+LANGUAGES = {"ko"}   # 11/4 결정: 한국어 고정. 열은 기록용으로 남긴다.
 OUTCOMES = {"completed", "timeout", "skipped"}
 POINTER_TYPES = {"pen", "touch", "mouse"}
+POINTER_SOURCES = {"canvas", "ui"}   # 포인터가 닿은 곳: 필기 영역 / 툴바·슬라이더·완료 버튼
+GESTURE_CONDITIONS = {"C2", "C3"}
 
 _TEXT_COLUMNS = {
     "schema_version", "session_id", "participant", "condition", "phase", "exp",
@@ -90,6 +92,12 @@ def load_dataset(root: str | Path) -> Dataset:
         participants=_read_csv(root / "participants.csv", PARTICIPANT_COLUMNS),
         questionnaire=_read_csv(root / "questionnaire.csv", QUESTIONNAIRE_COLUMNS),
     )
+
+
+def canvas_pen_downs(events: pd.DataFrame) -> pd.Series:
+    """필기 영역에 닿은 펜 다운. 툴바·슬라이더·완료 버튼을 누른 펜 다운(source=ui)은 뺀다."""
+    is_pen_down = (events["event"] == "pointerdown") & (events["pointer_type"] == "pen")
+    return is_pen_down & ~events["source"].fillna("").eq("ui")
 
 
 def parse_detail(detail: object) -> dict[str, str]:
