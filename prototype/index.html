@@ -1,25 +1,68 @@
 <!doctype html>
 <html lang="ko">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#f6f7fb">
   <title>Count &amp; Tune Prototype</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
   <!-- 단계별 지시 배너 (task.js) -->
   <header id="cue-banner">실험 준비 중</header>
 
-  <!-- C1·C2용 툴바와 슬라이더 (conditions.js) -->
-  <div id="toolbar" hidden></div>
 
-  <!-- 필기 영역 -->
-  <canvas id="canvas"></canvas>
+  <div class="app">
+    <!-- C1·C2용 툴바와 슬라이더 (conditions.js) -->
+    <div class="floating-toolbar" role="toolbar">
+      <div class="drag-handle" id="dragHandle">
+        <span></span>
+      </div>
+      <button class="pen-tool active" data-color="#252b37" title="검정 펜">
+        <span class="pen-tip" style="--ink:#252b37"></span></button>
+      <button class="pen-tool" data-color="#e65060" title="빨강 펜">
+        <span class="pen-tip" style="--ink:#e65060"></span></button>
+      <button class="pen-tool" data-color="#f1bb3c" title="노랑 펜">
+        <span class="pen-tip" style="--ink:#f1bb3c"></span></button>
+
+      <span class="toolbar-divider"></span>
+      <div class="thickness">
+        <span class="thickness-dot"></span>
+        <span>3 px</span>
+      </div>
+
+      <span class="toolbar-divider"></span>
+      <button id="undo" class="icon-button" title="실행 취소" disabled><svg viewBox="0 0 24 24">
+          <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
+        </svg></button>
+      <button id="redo" class="icon-button" title="다시 실행" disabled><svg viewBox="0 0 24 24">
+          <path d="m15 14 5-5-5-5m5 5H10a6 6 0 0 0 0 12h2" />
+        </svg></button>
+      <button id="clear" class="icon-button" title="전체 지우기">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+          <path d="M20 4v7h-7" />
+        </svg>
+      </button>
+    </div>
+
+
+    <!-- 필기 영역 -->
+    <main class="desk">
+      <canvas id="canvas"></canvas>
+    </main>
+
+  </div>
+
 
   <!-- 모듈 로딩 순서: logger → recognition → conditions → task -->
+  <script src="js/script.js"></script>
   <script src="js/logger.js"></script>
   <script src="js/recognition.js"></script>
   <script src="js/conditions.js"></script>
   <script src="js/task.js"></script>
 </body>
+
 </html>

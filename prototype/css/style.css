@@ -1,7 +1,193 @@
 /* 공통 레이아웃. 각 담당자는 자기 기능 스타일을 아래 구역에 추가 */
-html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, "Malgun Gothic", sans-serif; }
-#canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-#cue-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 2; padding: 12px 16px; font-size: 20px; background: #f3f4f6; border-bottom: 1px solid #d1d5db; }
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#cue-banner {
+  height: 60px;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  font-size: 20px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
+}
+/* 추가 */
+:root {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #263044;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.floating-toolbar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 8px 0;
+
+  background: white;
+  border: 1px solid #e8eaf0;
+  border-radius: 10px;
+  box-shadow: 0 6px 12px #00000020;
+}
+
+.drag-handle {
+  width: 24px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: 6px;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.drag-handle span {
+  width: 4px;
+  height: 28px;
+  border-left: 2px dotted #9ca3af;
+  border-right: 2px dotted #9ca3af;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  width: 30px;
+  height: 30px;
+  padding: 0;
+
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #6d7890;
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: #f0f2f8;
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#undo,
+#redo svg {
+  transform: translateY(-2px);
+}
+
+.pen-tool {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 5px;
+  cursor: pointer;
+}
+.pen-tool:hover {
+  background: #f6f7fb;
+}
+.pen-tool.active {
+  background: #eef1ff;
+  border-color: #cfd6ff;
+}
+.pen-tip {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #00000017;
+}
+
+.toolbar-divider {
+  height: 27px;
+  width: 1px;
+  background: #e9ebf0;
+  margin: 0 8px;
+}
+
+.thickness {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #647087;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.thickness-dot {
+  width: 7px;
+  height: 7px;
+  background: #2b3548;
+  border-radius: 50%;
+}
+
+.desk {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.desk canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
 
 /* ---- conditions.js (강민진) ---- */
 
