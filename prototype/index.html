@@ -29,8 +29,10 @@
 
       <span class="toolbar-divider"></span>
       <div class="thickness">
-        <span class="thickness-dot"></span>
-        <span>3 px</span>
+        <span class="thickness-preview">
+          <span class="thickness-dot"></span>
+        </span>
+        <span id="thickness-value">3 px</span>
       </div>
 
       <span class="toolbar-divider"></span>
@@ -51,7 +53,13 @@
 
     <!-- 필기 영역 -->
     <main class="desk">
+      <div id="tune-slider">
+        <div class="tune-track"></div>
+        <div class="tune-thumb"></div>
+        <div class="tune-value">3.0</div>
+      </div>
       <canvas id="canvas"></canvas>
+      <div id="eraser-cursor"></div>
     </main>
 
   </div>

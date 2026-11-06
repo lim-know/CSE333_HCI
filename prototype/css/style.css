@@ -166,11 +166,27 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
+
+.thickness-preview {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .thickness-dot {
   width: 7px;
   height: 7px;
   background: #2b3548;
   border-radius: 50%;
+}
+#thickness-value {
+  text-align: center;
+  display: inline-block;
+  width: 52px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .desk {
@@ -187,6 +203,56 @@ body {
   display: block;
   touch-action: none;
   cursor: crosshair;
+}
+
+#eraser-cursor {
+  position: fixed;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #555;
+  border-radius: 50%;
+  pointer-events: none;
+  display: none;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
+
+#tune-slider {
+  position: fixed;
+  display: none;
+  width: 320px;
+  height: 60px;
+  pointer-events: none;
+  z-index: 1001;
+}
+
+.tune-track {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: #aaa;
+  border-radius: 2px;
+}
+
+.tune-thumb {
+  position: absolute;
+  top: 32px;
+  width: 16px;
+  height: 16px;
+  background: #252b37;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tune-value {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* ---- conditions.js (강민진) ---- */

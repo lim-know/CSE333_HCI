@@ -7,6 +7,7 @@ const undoButton = document.querySelector("#undo");
 const redoButton = document.querySelector("#redo");
 const PEN_WIDTH = 3;
 const ERASER_WIDTH = 24;
+const eraserCursor = document.querySelector("#eraser-cursor");
 let color = "#252b37";
 let activePointer = null;
 let last = null;
@@ -79,6 +80,19 @@ function drawSegment(a, b, strokeColor, width) {
   ctx.stroke();
   ctx.restore();
 }
+
+function updateEraserCursor(event, erasing) {
+  canvas.classList.toggle("erasing", erasing);
+
+  if (erasing) {
+    eraserCursor.style.display = "block";
+    eraserCursor.style.left = `${event.clientX}px`;
+    eraserCursor.style.top = `${event.clientY}px`;
+  } else {
+    eraserCursor.style.display = "none";
+  }
+}
+
 function render() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
@@ -119,21 +133,48 @@ function resize() {
 function startStroke(p) {
   currentStroke = {
     color,
-    width: PEN_WIDTH,
+    width: penWidth,
     points: [p],
   };
   strokes.push(currentStroke);
   redoStack = [];
-  drawSegment(p, p, color, PEN_WIDTH);
+  drawSegment(p, p, color, penWidth);
   updateHistoryButtons();
 }
 function down(event) {
-  console.log({
+  if (event.pointerType === "touch") {
+    console.log("hand touch", {
+      pointerType: event.pointerType,
+      button: event.button,
+      buttons: event.buttons,
+    });
+    touchPointer = event.pointerId;
+    return;
+  }
+
+  if (event.pointerType === "pen" && touchPointer !== null) {
+    console.log("Entering tuning mode", {
+      pointerType: event.pointerType,
+      button: event.button,
+      buttons: event.buttons,
+    });
+    tuning = true;
+    activePointer = event.pointerId;
+    canvas.setPointerCapture(event.pointerId);
+    tuneStartX = event.clientX;
+    tuneStartY = event.clientY;
+    tuneStartWidth = penWidth;
+
+    showTuneSlider();
+    return;
+  }
+
+  if (event.pointerType !== "pen" || activePointer !== null) return;
+  console.log("Entering pen mode", {
     pointerType: event.pointerType,
     button: event.button,
     buttons: event.buttons,
   });
-  if (event.pointerType !== "pen" || activePointer !== null) return;
   event.preventDefault();
   activePointer = event.pointerId;
   canvas.setPointerCapture(event.pointerId);
@@ -145,6 +186,20 @@ function down(event) {
   }
 }
 function move(event) {
+  if (
+    event.pointerType === "pen" &&
+    tuning &&
+    event.pointerId === activePointer
+  ) {
+    event.preventDefault();
+    const deltaX = event.clientX - tuneStartX;
+    penWidth = calculateWidth(deltaX);
+    updateTuneSlider(penWidth);
+    updateThickness();
+    return;
+  }
+
+  updateEraserCursor(event, erasing(event));
   if (event.pointerId !== activePointer) return;
   event.preventDefault();
   const samples =
@@ -159,23 +214,36 @@ function move(event) {
       eraseStroke(next);
       currentStroke = null;
     } else {
-      drawSegment(last, next, color, currentStroke.width);
+      drawSegment(last, next, color, penWidth);
       currentStroke.points.push(next);
     }
     last = next;
   }
 }
 function up(event) {
-  console.log({
-    pointerType: event.pointerType,
-    button: event.button,
-    buttons: event.buttons,
-  });
+  if (event.pointerType === "touch" && event.pointerId === touchPointer) {
+    touchPointer = null;
+  }
+  if (
+    event.pointerType === "pen" &&
+    tuning &&
+    event.pointerId === activePointer
+  ) {
+    tuning = false;
+    activePointer = null;
+    hideTuneSlider();
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    return;
+  }
+
   if (event.pointerId !== activePointer) return;
   activePointer = null;
   last = null;
   lastEraser = false;
   currentStroke = null;
+  updateEraserCursor(event, erasing(event));
   if (canvas.hasPointerCapture(event.pointerId))
     canvas.releasePointerCapture(event.pointerId);
 }
@@ -188,12 +256,14 @@ canvas.addEventListener("lostpointercapture", (event) => {
     activePointer = null;
     last = null;
     currentStroke = null;
+    updateEraserCursor(event, false);
   }
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 tools.forEach((button) =>
   button.addEventListener("click", () => {
     color = button.dataset.color;
+    updateThickness();
     tools.forEach((tool) => {
       const active = tool === button;
       tool.classList.toggle("active", active);
@@ -221,9 +291,52 @@ document.querySelector("#clear").addEventListener("click", () => {
 const toolbar = document.querySelector(".floating-toolbar");
 const dragHandle = document.querySelector(".drag-handle");
 const app = document.querySelector(".app");
+const tuneSlider = document.querySelector("#tune-slider");
+const tuneThumb = tuneSlider.querySelector(".tune-thumb");
+const tuneValue = tuneSlider.querySelector(".tune-value");
+
+const SLIDER_WIDTH = 320;
+let tuneSliderLeft = 0;
+let tuneSliderTop = 0;
 let offsetX = 0;
 let offsetY = 0;
 let dragging = false;
+
+const thicknessDot = document.querySelector(".thickness-dot");
+const thicknessValue = document.querySelector("#thickness-value");
+
+function updateThickness() {
+  thicknessDot.style.width = `${penWidth}px`;
+  thicknessDot.style.height = `${penWidth}px`;
+  thicknessDot.style.backgroundColor = color;
+  thicknessValue.textContent = `${penWidth.toFixed(1)} px`;
+}
+
+function showTuneSlider() {
+  const ratio = (penWidth - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH);
+
+  tuneSliderLeft = tuneStartX - ratio * SLIDER_WIDTH;
+  tuneSliderTop = tuneStartY - 32;
+
+  tuneSlider.style.left = `${tuneSliderLeft}px`;
+  tuneSlider.style.top = `${tuneSliderTop}px`;
+  tuneSlider.style.display = "block";
+
+  updateTuneSlider(penWidth, tuneStartX);
+}
+
+function updateTuneSlider(width, pointerX) {
+  const ratio = (width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH);
+  const thumbX = ratio * SLIDER_WIDTH;
+
+  tuneThumb.style.left = `${thumbX}px`;
+  tuneValue.style.left = `${thumbX}px`;
+  tuneValue.textContent = width.toFixed(1);
+}
+
+function hideTuneSlider() {
+  tuneSlider.style.display = "none";
+}
 
 dragHandle.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return;
@@ -260,5 +373,34 @@ function stopDragging() {
 dragHandle.addEventListener("pointerup", stopDragging);
 dragHandle.addEventListener("pointercancel", stopDragging);
 
+const MIN_WIDTH = 0.1;
+const MAX_WIDTH = 15.0;
+const SNAP_THRESHOLD = 0.2;
+const PIXELS_PER_STEP = 4;
+
+let penWidth = 3.0;
+let touchPointer = null;
+let tuning = false;
+let tuneStartX = 0;
+let tuneStartY = 0;
+let tuneStartWidth = 0;
+
+function calculateWidth(deltaX) {
+  let width =
+    tuneStartWidth + (deltaX / SLIDER_WIDTH) * (MAX_WIDTH - MIN_WIDTH);
+
+  width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
+  width = Math.round(width * 10) / 10;
+
+  const nearestInteger = Math.round(width);
+
+  if (Math.abs(width - nearestInteger) <= SNAP_THRESHOLD) {
+    width = nearestInteger;
+  }
+
+  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
+}
+
 new ResizeObserver(resize).observe(canvas);
 resize();
+updateThickness();
