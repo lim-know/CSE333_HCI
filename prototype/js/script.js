@@ -148,19 +148,37 @@ function down(event) {
       button: event.button,
       buttons: event.buttons,
     });
-    touchPointer = event.pointerId;
+    touchPointers.add(event.pointerId);
     return;
   }
 
-  if (event.pointerType === "pen" && touchPointer !== null) {
+  if (
+    event.pointerType === "pen" &&
+    touchPointers.size >= 1 &&
+    touchPointers.size <= 3 &&
+    activePointer === null
+  ) {
     console.log("Entering tuning mode", {
       pointerType: event.pointerType,
       button: event.button,
       buttons: event.buttons,
     });
+    event.preventDefault();
+
+    selectedPreset = touchPointers.size - 1;
+    penWidth = presetWidths[selectedPreset];
+    color = tools[selectedPreset].dataset.color;
+    tools.forEach((tool, index) => {
+      tool.classList.toggle("active", index === selectedPreset);
+    });
+
+    updatePresetUI();
+    updateThickness();
+
     tuning = true;
     activePointer = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
+
     tuneStartX = event.clientX;
     tuneStartY = event.clientY;
     tuneStartWidth = penWidth;
@@ -194,7 +212,9 @@ function move(event) {
     event.preventDefault();
     const deltaX = event.clientX - tuneStartX;
     penWidth = calculateWidth(deltaX);
+    presetWidths[selectedPreset] = penWidth;
     updateTuneSlider(penWidth);
+    updatePresetUI();
     updateThickness();
     return;
   }
@@ -221,8 +241,9 @@ function move(event) {
   }
 }
 function up(event) {
-  if (event.pointerType === "touch" && event.pointerId === touchPointer) {
-    touchPointer = null;
+  if (event.pointerType === "touch") {
+    touchPointers.delete(event.pointerId);
+    return;
   }
   if (
     event.pointerType === "pen" &&
@@ -260,9 +281,12 @@ canvas.addEventListener("lostpointercapture", (event) => {
   }
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-tools.forEach((button) =>
+tools.forEach((button, index) =>
   button.addEventListener("click", () => {
+    selectedPreset = index;
     color = button.dataset.color;
+    penWidth = presetWidths[selectedPreset];
+
     updateThickness();
     tools.forEach((tool) => {
       const active = tool === button;
@@ -304,6 +328,14 @@ let dragging = false;
 
 const thicknessDot = document.querySelector(".thickness-dot");
 const thicknessValue = document.querySelector("#thickness-value");
+
+function updatePresetUI() {
+  const presets = document.querySelectorAll("[data-preset]");
+
+  presets.forEach((preset, index) => {
+    preset.classList.toggle("active", index === selectedPreset);
+  });
+}
 
 function updateThickness() {
   thicknessDot.style.width = `${penWidth}px`;
@@ -378,8 +410,11 @@ const MAX_WIDTH = 15.0;
 const SNAP_THRESHOLD = 0.2;
 const PIXELS_PER_STEP = 4;
 
-let penWidth = 3.0;
-let touchPointer = null;
+const touchPointers = new Set();
+const presetWidths = [3.0, 3.0, 5.0];
+let selectedPreset = 0;
+let penWidth = presetWidths[selectedPreset];
+
 let tuning = false;
 let tuneStartX = 0;
 let tuneStartY = 0;
