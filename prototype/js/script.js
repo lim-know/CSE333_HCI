@@ -21,7 +21,7 @@ function point(event) {
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 function erasing(event) {
-  return (event.buttons & 32) !== 0; //펜측면 버튼 누를때 buttons:32 button:5
+  return (event.buttons & (32 | 2)) !== 0; //펜측면 버튼 누를때 buttons:32 button:5
 }
 function distanceToSegment(p, a, b) {
   const dx = b.x - a.x;
