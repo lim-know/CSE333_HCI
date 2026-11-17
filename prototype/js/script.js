@@ -1,27 +1,102 @@
 "use strict";
+// 담당: 노태림 (필기·지우개·툴바·조절 슬라이더 표시)
+// 11/17 정원준: 조건·과제·로그 연결을 위해 정리
+//  - 펜 상태(슬롯, 굵기)를 Pen 한곳에서 바꾸고, 바뀔 때마다 로그를 남긴다
+//  - C2·C3 제스처 판단은 recognition.js 로 옮김 (이 파일은 결과만 받아서 그림)
+//  - 굵기 단위를 pt로 (size.js). 화면에는 pt × 96/72 px로 그린다
+//  - 형광펜은 반투명. 획을 통째로 그려서 겹친 부분이 진해지지 않게 함
+
 const canvas = document.querySelector("#canvas");
 const ctx = canvas.getContext("2d");
 
-const tools = [...document.querySelectorAll("[data-color]")];
+const tools = [...document.querySelectorAll(".pen-tool[data-slot]")];
 const undoButton = document.querySelector("#undo");
 const redoButton = document.querySelector("#redo");
-const PEN_WIDTH = 3;
 const ERASER_WIDTH = 24;
 const eraserCursor = document.querySelector("#eraser-cursor");
-let color = "#252b37";
+
+// 슬롯 = 손가락 수. 순서: 검정, 빨강, 노랑 형광펜 (11/17 결정)
+const PENS = {
+  1: { name: "검정 펜", color: "#252b37", alpha: 1 },
+  2: { name: "빨간 펜", color: "#e65060", alpha: 1 },
+  3: { name: "노란 형광펜", color: "#f1bb3c", alpha: 0.45 },
+};
+const DEFAULT_SIZES = { 1: 1, 2: 1, 3: 4 };   // 블록 시작 때 굵기 (pt)
+
+// ---------- 펜 상태 ----------
+// rememberSize: 슬롯마다 굵기를 따로 기억할지 (log-schema "합의할 것". 기본은 기억)
+const Pen = {
+  slot: 1,
+  sizes: { ...DEFAULT_SIZES },
+  shared: DEFAULT_SIZES[1],
+  rememberSize: true,
+
+  get size() {
+    return this.rememberSize ? this.sizes[this.slot] : this.shared;
+  },
+  get color() {
+    return PENS[this.slot].color;
+  },
+  get alpha() {
+    return PENS[this.slot].alpha;
+  },
+
+  // source: toolbar / slider / gesture. 값이 바뀔 때만 로그를 남긴다.
+  setSlot(slot, source) {
+    if (slot === this.slot) return false;
+    this.slot = slot;
+    updateToolUI();
+    Logger.log("slot_change", { source, slot: this.slot, size: this.size });
+    return true;
+  },
+  setSize(size, source) {
+    if (size === this.size) return false;
+    if (this.rememberSize) this.sizes[this.slot] = size;
+    else this.shared = size;
+    updateToolUI();
+    Logger.log("size_change", { source, slot: this.slot, size: this.size });
+    return true;
+  },
+  // 블록 시작 때. 로그 없이 처음 상태로 되돌린다.
+  reset() {
+    this.slot = 1;
+    this.sizes = { ...DEFAULT_SIZES };
+    this.shared = DEFAULT_SIZES[1];
+    updateToolUI();
+  },
+};
+
+// ---------- 앱 설정 (task.js 가 바꿈) ----------
+const Ink = {
+  locked: false,        // true면 필기 안 됨 (안내 화면 등)
+  allowEraser: true,    // 실험 모드에서는 끔
+  allowMouse: false,    // 펜 없이 테스트할 때만 (?mouse=1)
+  onStroke: null,       // 획이 하나 끝날 때 부를 함수 (선택)
+  clear() {
+    strokes = [];
+    redoStack = [];
+    render();
+  },
+};
+Ink.allowMouse = new URLSearchParams(location.search).get("mouse") === "1";
+
 let activePointer = null;
+let activeMode = null;   // "ink" | "erase" | "gesture"
 let last = null;
-let lastEraser = false;
 let strokes = [];
 let redoStack = [];
 let currentStroke = null;
+let renderQueued = false;
 
+function isPen(event) {
+  return event.pointerType === "pen" || (Ink.allowMouse && event.pointerType === "mouse");
+}
 function point(event) {
   const rect = canvas.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 function erasing(event) {
-  return (event.buttons & (32 | 2)) !== 0; //펜측면 버튼 누를때 buttons:32 button:5
+  return Ink.allowEraser && (event.buttons & (32 | 2)) !== 0; //펜측면 버튼 누를때 buttons:32 button:5
 }
 function distanceToSegment(p, a, b) {
   const dx = b.x - a.x;
@@ -68,15 +143,20 @@ function eraseStroke(p) {
     render();
   }
 }
-function drawSegment(a, b, strokeColor, width) {
+
+// 획 하나를 경로 하나로 그린다. 형광펜이 겹쳐서 얼룩지지 않는다.
+function drawStroke(stroke) {
+  const points = stroke.points;
   ctx.save();
+  ctx.globalAlpha = stroke.alpha;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = width;
-  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = stroke.width;
+  ctx.strokeStyle = stroke.color;
   ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
+  ctx.moveTo(points[0].x, points[0].y);
+  if (points.length === 1) ctx.lineTo(points[0].x + 0.01, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
   ctx.stroke();
   ctx.restore();
 }
@@ -96,24 +176,16 @@ function updateEraserCursor(event, erasing) {
 function render() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
-  for (const stroke of strokes) {
-    for (let i = 1; i < stroke.points.length; i++) {
-      drawSegment(
-        stroke.points[i - 1],
-        stroke.points[i],
-        stroke.color,
-        stroke.width,
-      );
-    }
-    if (stroke.points.length === 1)
-      drawSegment(
-        stroke.points[0],
-        stroke.points[0],
-        stroke.color,
-        stroke.width,
-      );
-  }
+  for (const stroke of strokes) drawStroke(stroke);
   updateHistoryButtons();
+}
+function requestRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    render();
+  });
 }
 function updateHistoryButtons() {
   undoButton.disabled = strokes.length === 0;
@@ -132,139 +204,86 @@ function resize() {
 }
 function startStroke(p) {
   currentStroke = {
-    color,
-    width: penWidth,
+    slot: Pen.slot,
+    color: Pen.color,
+    alpha: Pen.alpha,
+    size: Pen.size,
+    width: Size.toPx(Pen.size),
     points: [p],
   };
   strokes.push(currentStroke);
   redoStack = [];
-  drawSegment(p, p, color, penWidth);
-  updateHistoryButtons();
+  requestRender();
+  Logger.log("ink_start", { source: "pen", slot: Pen.slot, size: Pen.size });
 }
+function endStroke() {
+  if (!currentStroke) return;
+  Logger.log("ink_end", { source: "pen", slot: currentStroke.slot, size: currentStroke.size });
+  const finished = currentStroke;
+  currentStroke = null;
+  if (typeof Ink.onStroke === "function") Ink.onStroke(finished);
+}
+
 function down(event) {
-  if (event.pointerType === "touch") {
-    console.log("hand touch", {
-      pointerType: event.pointerType,
-      button: event.button,
-      buttons: event.buttons,
-    });
-    touchPointers.add(event.pointerId);
-    return;
-  }
+  // 손가락은 recognition.js 가 따로 본다. 여기서는 그리지 않는다.
+  if (!isPen(event) || activePointer !== null || Ink.locked) return;
+  event.preventDefault();
 
-  if (
-    event.pointerType === "pen" &&
-    touchPointers.size >= 1 &&
-    touchPointers.size <= 3 &&
-    activePointer === null
-  ) {
-    console.log("Entering tuning mode", {
-      pointerType: event.pointerType,
-      button: event.button,
-      buttons: event.buttons,
-    });
-    event.preventDefault();
-
-    selectedPreset = touchPointers.size - 1;
-    penWidth = presetWidths[selectedPreset];
-    color = tools[selectedPreset].dataset.color;
-    tools.forEach((tool, index) => {
-      tool.classList.toggle("active", index === selectedPreset);
-    });
-
-    updatePresetUI();
-    updateThickness();
-
-    tuning = true;
+  // C2·C3: 정지한 손가락이 있으면 제스처로 처리 (잉크 없음)
+  if (Recognition.penDown(event)) {
+    activeMode = "gesture";
     activePointer = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
-
-    tuneStartX = event.clientX;
-    tuneStartY = event.clientY;
-    tuneStartWidth = penWidth;
-
-    showTuneSlider();
     return;
   }
 
-  if (event.pointerType !== "pen" || activePointer !== null) return;
-  console.log("Entering pen mode", {
-    pointerType: event.pointerType,
-    button: event.button,
-    buttons: event.buttons,
-  });
-  event.preventDefault();
   activePointer = event.pointerId;
   canvas.setPointerCapture(event.pointerId);
   last = point(event);
   if (erasing(event)) {
+    activeMode = "erase";
     eraseStroke(last);
   } else {
+    activeMode = "ink";
     startStroke(last);
   }
 }
 function move(event) {
-  if (
-    event.pointerType === "pen" &&
-    tuning &&
-    event.pointerId === activePointer
-  ) {
-    event.preventDefault();
-    const deltaX = event.clientX - tuneStartX;
-    penWidth = calculateWidth(deltaX);
-    presetWidths[selectedPreset] = penWidth;
-    updateTuneSlider(penWidth);
-    updatePresetUI();
-    updateThickness();
+  if (isPen(event)) updateEraserCursor(event, erasing(event));
+  if (event.pointerId !== activePointer) return;
+  event.preventDefault();
+
+  if (activeMode === "gesture") {
+    Recognition.penMove(event);
     return;
   }
 
-  updateEraserCursor(event, erasing(event));
-  if (event.pointerId !== activePointer) return;
-  event.preventDefault();
   const samples =
     typeof event.getCoalescedEvents === "function"
       ? event.getCoalescedEvents()
       : [event];
   for (const sample of samples.length ? samples : [event]) {
     const next = point(sample);
-    const erase =
-      erasing(sample) || (sample.buttons === undefined && erasing(event));
-    if (erase) {
+    if (activeMode === "erase") {
       eraseStroke(next);
-      currentStroke = null;
-    } else {
-      drawSegment(last, next, color, penWidth);
+    } else if (currentStroke) {
       currentStroke.points.push(next);
     }
     last = next;
   }
+  if (activeMode === "ink") requestRender();
+}
+function finish(event) {
+  if (activeMode === "gesture") Recognition.penUp(event);
+  if (activeMode === "ink") endStroke();
+  activePointer = null;
+  activeMode = null;
+  last = null;
 }
 function up(event) {
-  if (event.pointerType === "touch") {
-    touchPointers.delete(event.pointerId);
-    return;
-  }
-  if (
-    event.pointerType === "pen" &&
-    tuning &&
-    event.pointerId === activePointer
-  ) {
-    tuning = false;
-    activePointer = null;
-    hideTuneSlider();
-    if (canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
-    }
-    return;
-  }
-
   if (event.pointerId !== activePointer) return;
-  activePointer = null;
-  last = null;
-  lastEraser = false;
-  currentStroke = null;
-  updateEraserCursor(event, erasing(event));
+  finish(event);
+  updateEraserCursor(event, false);
   if (canvas.hasPointerCapture(event.pointerId))
     canvas.releasePointerCapture(event.pointerId);
 }
@@ -274,24 +293,19 @@ canvas.addEventListener("pointerup", up);
 canvas.addEventListener("pointercancel", up);
 canvas.addEventListener("lostpointercapture", (event) => {
   if (activePointer === event.pointerId) {
-    activePointer = null;
-    last = null;
-    currentStroke = null;
+    finish(event);
     updateEraserCursor(event, false);
   }
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-tools.forEach((button, index) =>
-  button.addEventListener("click", () => {
-    selectedPreset = index;
-    color = button.dataset.color;
-    penWidth = presetWidths[selectedPreset];
 
-    updateThickness();
-    tools.forEach((tool) => {
-      const active = tool === button;
-      tool.classList.toggle("active", active);
-    });
+// 툴바 펜 버튼: C1·C2에서 펜을 고르는 곳. C3에서는 현재 펜 표시만 (conditions.js)
+tools.forEach((button) =>
+  button.addEventListener("click", () => {
+    if (!Conditions.toolbarPens) return;
+    const slot = Number(button.dataset.slot);
+    Pen.setSlot(slot, "toolbar");
+    Logger.log("toolbar_tap", { source: "toolbar", slot: Pen.slot, size: Pen.size });
   }),
 );
 undoButton.addEventListener("click", () => {
@@ -319,9 +333,6 @@ const tuneSlider = document.querySelector("#tune-slider");
 const tuneThumb = tuneSlider.querySelector(".tune-thumb");
 const tuneValue = tuneSlider.querySelector(".tune-value");
 
-const SLIDER_WIDTH = 320;
-let tuneSliderLeft = 0;
-let tuneSliderTop = 0;
 let offsetX = 0;
 let offsetY = 0;
 let dragging = false;
@@ -329,45 +340,51 @@ let dragging = false;
 const thicknessDot = document.querySelector(".thickness-dot");
 const thicknessValue = document.querySelector("#thickness-value");
 
-function updatePresetUI() {
-  const presets = document.querySelectorAll("[data-preset]");
-
-  presets.forEach((preset, index) => {
-    preset.classList.toggle("active", index === selectedPreset);
+// 툴바: 지금 펜과 굵기 표시
+function updateToolUI() {
+  tools.forEach((tool) => {
+    tool.classList.toggle("active", Number(tool.dataset.slot) === Pen.slot);
   });
+  const px = Math.max(2, Math.min(20, Size.toPx(Pen.size)));
+  thicknessDot.style.width = `${px}px`;
+  thicknessDot.style.height = `${px}px`;
+  thicknessDot.style.backgroundColor = Pen.color;
+  thicknessDot.style.opacity = Pen.alpha;
+  thicknessValue.textContent = Size.label(Pen.size);
+  if (typeof Conditions !== "undefined") Conditions.syncSlider();
 }
 
-function updateThickness() {
-  thicknessDot.style.width = `${penWidth}px`;
-  thicknessDot.style.height = `${penWidth}px`;
-  thicknessDot.style.backgroundColor = color;
-  thicknessValue.textContent = `${penWidth.toFixed(1)} px`;
-}
-
-function showTuneSlider() {
-  const ratio = (penWidth - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH);
-
-  tuneSliderLeft = tuneStartX - ratio * SLIDER_WIDTH;
-  tuneSliderTop = tuneStartY - 32;
-
-  tuneSlider.style.left = `${tuneSliderLeft}px`;
-  tuneSlider.style.top = `${tuneSliderTop}px`;
+// C2·C3 굵기 조절 중 펜 옆에 뜨는 눈금 (recognition.js 가 부름)
+// 슬라이더의 현재 값 위치가 펜 끝에 오도록 놓아서, 펜을 움직이는 만큼 손잡이가 따라간다.
+function showTuneSlider(x, y, size) {
+  const left = x - Size.toRatio(size) * Size.TRACK_PX;
+  tuneSlider.style.width = `${Size.TRACK_PX}px`;
+  tuneSlider.style.left = `${left}px`;
+  tuneSlider.style.top = `${y - 72}px`;
   tuneSlider.style.display = "block";
-
-  updateTuneSlider(penWidth, tuneStartX);
+  updateTuneSlider(size);
 }
 
-function updateTuneSlider(width, pointerX) {
-  const ratio = (width - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH);
-  const thumbX = ratio * SLIDER_WIDTH;
-
+function updateTuneSlider(size) {
+  const thumbX = Size.toRatio(size) * Size.TRACK_PX;
   tuneThumb.style.left = `${thumbX}px`;
+  tuneThumb.style.width = tuneThumb.style.height = `${Math.max(8, Size.toPx(size) + 4)}px`;
+  tuneThumb.style.background = Pen.color;
+  tuneThumb.style.opacity = Math.max(Pen.alpha, 0.7);
   tuneValue.style.left = `${thumbX}px`;
-  tuneValue.textContent = width.toFixed(1);
+  tuneValue.textContent = Size.label(size);
 }
 
 function hideTuneSlider() {
   tuneSlider.style.display = "none";
+}
+
+// 조절 눈금에 프리셋 표시
+for (const preset of Size.PRESETS) {
+  const tick = document.createElement("div");
+  tick.className = "tune-tick";
+  tick.style.left = `${Size.toRatio(preset) * Size.TRACK_PX}px`;
+  tuneSlider.appendChild(tick);
 }
 
 dragHandle.addEventListener("pointerdown", (e) => {
@@ -405,37 +422,13 @@ function stopDragging() {
 dragHandle.addEventListener("pointerup", stopDragging);
 dragHandle.addEventListener("pointercancel", stopDragging);
 
-const MIN_WIDTH = 0.1;
-const MAX_WIDTH = 15.0;
-const SNAP_THRESHOLD = 0.2;
-const PIXELS_PER_STEP = 4;
-
-const touchPointers = new Set();
-const presetWidths = [3.0, 3.0, 5.0];
-let selectedPreset = 0;
-let penWidth = presetWidths[selectedPreset];
-
-let tuning = false;
-let tuneStartX = 0;
-let tuneStartY = 0;
-let tuneStartWidth = 0;
-
-function calculateWidth(deltaX) {
-  let width =
-    tuneStartWidth + (deltaX / SLIDER_WIDTH) * (MAX_WIDTH - MIN_WIDTH);
-
-  width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
-  width = Math.round(width * 10) / 10;
-
-  const nearestInteger = Math.round(width);
-
-  if (Math.abs(width - nearestInteger) <= SNAP_THRESHOLD) {
-    width = nearestInteger;
-  }
-
-  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
+// 실험 모드에서는 툴바를 처음 자리로 (조건마다 이동 거리가 같도록)
+function resetToolbarPosition() {
+  toolbar.style.left = "";
+  toolbar.style.top = "";
+  toolbar.style.transform = "";
 }
 
 new ResizeObserver(resize).observe(canvas);
 resize();
-updateThickness();
+updateToolUI();

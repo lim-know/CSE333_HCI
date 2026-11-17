@@ -40,6 +40,8 @@ const Logger = (() => {
     stillMs: 120,
     touchToPenMs: "none",       // 손→펜 간격 상한. 아직 쓰지 않으면 none
     download: true,             // endBlock 때 파일을 내려받을지
+    touchCounter: null,         // recognition.js 가 주는 손가락 수 계산 (없으면 아래 간단한 규칙)
+    blockDetail: {},            // block_start detail 에 덧붙일 값 (palm_px 등)
   };
 
   let current = null;   // { meta, rows, seq }
@@ -78,6 +80,7 @@ const Logger = (() => {
   }
 
   function touchCounts(tPen) {
+    if (typeof config.touchCounter === "function") return config.touchCounter(tPen);
     let still = 0;
     for (const touch of touches.values()) {
       if (!touch.moved && tPen - touch.t0 >= config.stillMs) still += 1;
@@ -113,6 +116,7 @@ const Logger = (() => {
         still_px: config.stillPx,
         still_ms: config.stillMs,
         touch_to_pen_ms: config.touchToPenMs,
+        ...config.blockDetail,
         epoch_ms: Date.now(),
       },
     });

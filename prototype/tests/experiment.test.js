@@ -1,0 +1,172 @@
+// size.js, recognition.js, task.js 의 계산 부분을 브라우저 없이 확인한다.
+// 실행: node --test prototype/tests/
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
+
+const JS = path.join(__dirname, "..", "js");
+const read = (name) => fs.readFileSync(path.join(JS, name), "utf8");
+
+function loadSize() {
+  const context = { Math, Number };
+  vm.createContext(context);
+  return vm.runInContext(`${read("size.js")}\nSize;`, context);
+}
+
+// recognition.js 를 가짜 window/Logger/Pen 위에서 돌린다
+function loadRecognition() {
+  let clock = 0;
+  const listeners = {};
+  const logs = [];
+  const timers = [];
+  const area = { closest: (selector) => (selector === ".desk" ? area : null) };
+  const context = {
+    window: { addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); } },
+    document: { body: { dataset: {} } },
+    location: { search: "" },
+    performance: { now: () => clock },
+    setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
+    clearTimeout: () => {},
+    URLSearchParams,
+    Logger: { log: (event, fields) => logs.push({ event, ...fields }), configure: () => {} },
+    showTuneSlider: () => {},
+    updateTuneSlider: () => {},
+    hideTuneSlider: () => {},
+    Math, Number, Object, Map, Boolean, Infinity,
+  };
+  vm.createContext(context);
+  context.Size = vm.runInContext(`${read("size.js")}\nSize;`, context);
+  vm.runInContext(`
+    var Pen = {
+      slot: 1, sizes: { 1: 1, 2: 1, 3: 4 }, rememberSize: true,
+      get size() { return this.sizes[this.slot]; },
+      setSlot(slot, source) { if (slot === this.slot) return false; this.slot = slot; Logger.log("slot_change", { source, slot }); return true; },
+      setSize(size, source) { if (size === this.size) return false; this.sizes[this.slot] = size; Logger.log("size_change", { source, size }); return true; },
+    };`, context);
+  const recognition = vm.runInContext(`${read("recognition.js")}\nRecognition;`, context);
+
+  const touch = (type, id, x, y) => {
+    for (const fn of listeners[type] || []) {
+      fn({ type, pointerType: "touch", pointerId: id, clientX: x, clientY: y, width: 10, height: 10, timeStamp: clock, target: area });
+    }
+  };
+  const pen = (id, x) => ({ pointerId: id, clientX: x, clientY: 300, timeStamp: clock });
+  const advance = (ms) => {
+    clock += ms;
+    for (const t of timers.splice(0)) if (t.at <= clock) t.fn(); else timers.push(t);
+  };
+  return { recognition, logs, touch, pen, advance, Pen: context.Pen };
+}
+
+test("굵기: 프리셋은 같은 간격, 근처에서 스냅", () => {
+  const Size = loadSize();
+  assert.deepEqual([...Size.PRESETS].map((p) => Size.toRatio(p)), [0, 0.25, 0.5, 0.75, 1]);
+  assert.equal(Size.fromRatio(0.5 + 5 / Size.TRACK_PX), 2);      // 5px 옆 → 2pt 로 붙음
+  assert.notEqual(Size.fromRatio(0.5 + 30 / Size.TRACK_PX), 2);  // 30px 옆 → 사이값
+  assert.equal(Size.fromDrag(1, 80), 2);                          // 80px = 한 칸
+  assert.equal(Size.fromDrag(1, -1000), 0.5);                     // 끝에서 멈춤
+  assert.equal(Size.fromDrag(1, 1000), 8);
+});
+
+test("C3: 정지한 손가락 수가 슬롯, 드래그가 굵기", () => {
+  const { recognition, logs, touch, pen, advance, Pen } = loadRecognition();
+  recognition.setMode("count");
+  touch("pointerdown", 11, 100, 400);
+  touch("pointerdown", 12, 140, 400);
+  advance(50);
+  assert.equal(recognition.penDown(pen(1, 600)), false, "아직 정지 시간 전이면 필기");
+  advance(100);
+  assert.equal(recognition.state, "ARMED");
+  assert.equal(recognition.penDown(pen(1, 600)), true);
+  assert.equal(Pen.slot, 2);
+  recognition.penMove(pen(1, 680));
+  assert.equal(Pen.size, 2);
+  recognition.penUp(pen(1, 680));
+  const events = logs.map((l) => l.event);
+  assert.ok(events.indexOf("activation") < events.indexOf("slot_change"));
+  assert.ok(events.includes("gesture_commit"));
+  assert.equal(logs.find((l) => l.event === "activation").n_still, 2);
+});
+
+test("움직이는 손가락은 정지로 세지 않는다", () => {
+  const { recognition, touch, pen, advance } = loadRecognition();
+  recognition.setMode("count");
+  touch("pointerdown", 11, 100, 400);
+  advance(100);
+  touch("pointermove", 11, 130, 400);   // 30px 이동 → 시간 다시 잼
+  advance(60);
+  assert.equal(recognition.penDown(pen(1, 600)), false);
+  advance(80);
+  assert.equal(recognition.penDown(pen(1, 600)), true);
+});
+
+test("C2: 손가락 수와 상관없이 슬롯은 그대로, 굵기만", () => {
+  const { recognition, touch, pen, advance, Pen } = loadRecognition();
+  recognition.setMode("size");
+  touch("pointerdown", 11, 100, 400);
+  touch("pointerdown", 12, 140, 400);
+  touch("pointerdown", 13, 180, 400);
+  advance(200);
+  assert.equal(recognition.penDown(pen(1, 600)), true);
+  assert.equal(Pen.slot, 1);
+  recognition.penMove(pen(1, 520));
+  assert.equal(Pen.size, 0.5);
+});
+
+test("C1과 손가락 4개 이상은 제스처가 아니다", () => {
+  const { recognition, touch, pen, advance } = loadRecognition();
+  recognition.setMode("off");
+  touch("pointerdown", 11, 100, 400);
+  advance(200);
+  assert.equal(recognition.penDown(pen(1, 600)), false);
+  recognition.setMode("count");
+  for (const id of [12, 13, 14]) touch("pointerdown", id, 100 + id, 400);
+  advance(200);
+  assert.equal(recognition.penDown(pen(1, 600)), false);
+});
+
+test("배정표: 6가지 순서를 2명씩, 조건·세트 짝이 고르게", () => {
+  const source = read("task.js");
+  const match = source.match(/const ORDERS = (\[[\s\S]*?\]);/);
+  const ORDERS = vm.runInNewContext(match[1]);
+  const pick = (n) => ORDERS[Math.floor(((n - 1) % 12) / 2)];
+  const orders = new Set();
+  const pairs = {};
+  for (let n = 1; n <= 12; n++) {
+    const o = pick(n);
+    orders.add(o.conditions.join("-"));
+    o.conditions.forEach((c, i) => { pairs[c + o.sets[i]] = (pairs[c + o.sets[i]] || 0) + 1; });
+  }
+  assert.equal(orders.size, 6);
+  assert.deepEqual(Object.values(pairs).sort(), Array(9).fill(4));
+});
+
+test("임시 스크립트가 형식에 맞고, 매 단계 실제로 바꿔야 한다", () => {
+  const context = {};
+  vm.createContext(context);
+  const scripts = vm.runInContext(`${read("scripts-data.js")}\nSCRIPT_CSV;`, context);
+  for (const [id, text] of Object.entries(scripts)) {
+    const [header, ...rows] = text.trim().split("\n").map((l) => l.split(","));
+    const col = (row, name) => row[header.indexOf(name)];
+    let slot = 1;
+    const sizes = { 1: 1, 2: 1, 3: 4 };
+    for (const row of rows) {
+      assert.equal(col(row, "script_id"), id);
+      assert.ok(Number(col(row, "time_limit_ms")) > 0);
+      const type = col(row, "step_type");
+      if (type === "copy") continue;
+      if (type !== "size_only") {
+        assert.notEqual(Number(col(row, "target_slot")), slot, `${id}/${col(row, "step_id")}`);
+        slot = Number(col(row, "target_slot"));
+      }
+      if (type !== "switch_only") {
+        assert.notEqual(Number(col(row, "target_size")), sizes[slot], `${id}/${col(row, "step_id")}`);
+        sizes[slot] = Number(col(row, "target_size"));
+      }
+    }
+  }
+});

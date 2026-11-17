@@ -10,32 +10,43 @@
 </head>
 
 <body>
-  <!-- 단계별 지시 배너 (task.js) -->
-  <header id="cue-banner">실험 준비 중</header>
+  <!-- 단계별 지시 배너 (task.js). 완료 버튼은 필기 영역 밖이라 로그에 source=ui 로 남는다 -->
+  <header id="cue-banner">
+    <span id="cue-text">실험 준비 중</span>
+    <span id="cue-progress"></span>
+    <button id="home-button" class="banner-button secondary" hidden>처음 화면</button>
+    <button id="done-button" class="banner-button" hidden>완료</button>
+  </header>
 
 
   <div class="app">
-    <!-- C1·C2용 툴바와 슬라이더 (conditions.js) -->
+    <!-- 툴바: C1·C2는 펜 선택, C1은 굵기 슬라이더까지 (conditions.js). C3는 표시만 -->
     <div class="floating-toolbar" role="toolbar">
       <div class="drag-handle" id="dragHandle">
         <span></span>
       </div>
-      <button class="pen-tool active" data-color="#252b37" title="검정 펜">
+      <button class="pen-tool active" data-slot="1" title="검정 펜">
         <span class="pen-tip" style="--ink:#252b37"></span></button>
-      <button class="pen-tool" data-color="#e65060" title="빨강 펜">
+      <button class="pen-tool" data-slot="2" title="빨간 펜">
         <span class="pen-tip" style="--ink:#e65060"></span></button>
-      <button class="pen-tool" data-color="#f1bb3c" title="노랑 펜">
-        <span class="pen-tip" style="--ink:#f1bb3c"></span></button>
+      <button class="pen-tool" data-slot="3" title="노란 형광펜">
+        <span class="pen-tip highlighter" style="--ink:#f1bb3c"></span></button>
 
       <span class="toolbar-divider"></span>
       <div class="thickness">
         <span class="thickness-preview">
           <span class="thickness-dot"></span>
         </span>
-        <span id="thickness-value">3 px</span>
+        <span id="thickness-value">1 pt</span>
       </div>
 
-      <span class="toolbar-divider"></span>
+      <!-- C1 굵기 슬라이더 -->
+      <div id="size-slider" title="굵기">
+        <div class="size-track"></div>
+        <div class="size-thumb"></div>
+      </div>
+
+      <span class="toolbar-divider history"></span>
       <button id="undo" class="icon-button" title="실행 취소" disabled><svg viewBox="0 0 24 24">
           <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
         </svg></button>
@@ -51,12 +62,13 @@
     </div>
 
 
-    <!-- 필기 영역 -->
+    <!-- 필기 영역. 이 안에서 눌린 포인터는 로그에 source=canvas -->
     <main class="desk">
+      <div id="target"></div>
       <div id="tune-slider">
         <div class="tune-track"></div>
         <div class="tune-thumb"></div>
-        <div class="tune-value">3.0</div>
+        <div class="tune-value">1 pt</div>
       </div>
       <canvas id="canvas"></canvas>
       <div id="eraser-cursor"></div>
@@ -64,12 +76,57 @@
 
   </div>
 
+  <!-- 안내 화면 (task.js) -->
+  <div id="screen" hidden></div>
 
-  <!-- 모듈 로딩 순서: logger → recognition → conditions → task -->
+  <template id="setup-template">
+    <div class="screen-card setup">
+      <h1>Count &amp; Tune 실험</h1>
+      <form autocomplete="off">
+        <div class="form-grid">
+          <label>참가자 번호 <input name="participant" value="P00" required></label>
+          <label>세션 <input name="session" value="1" inputmode="numeric"></label>
+          <label>진행자 <input name="experimenter" placeholder="이니셜"></label>
+          <label>조건 순서 <input name="order"></label>
+          <label>제시문 세트 <input name="sets"></label>
+          <label>주 사용 손
+            <select name="handedness">
+              <option value="right">오른손</option>
+              <option value="left">왼손</option>
+            </select>
+          </label>
+          <label>평소 필기 언어
+            <select name="note_language">
+              <option value="ko">한국어</option>
+              <option value="en">영어</option>
+              <option value="mixed" selected>섞어서</option>
+            </select>
+          </label>
+          <label>태블릿 필기 경험 (개월) <input name="tablet_note_months" inputmode="numeric"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="practice" checked> 조건마다 연습 블록</label>
+        <p class="form-hint">조건 순서와 세트는 참가자 번호로 자동 배정됩니다 (P01–P12). P00은 테스트용.</p>
+        <p class="form-error"></p>
+        <div class="screen-buttons">
+          <button type="submit">실험 시작</button>
+        </div>
+      </form>
+      <div class="free-mode">
+        <span>자유 모드 (기록 없음)</span>
+        <button type="button" class="secondary" data-free="C1">C1</button>
+        <button type="button" class="secondary" data-free="C2">C2</button>
+        <button type="button" class="secondary" data-free="C3">C3</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- 모듈 로딩 순서: size → script(필기) → logger → recognition → conditions → 과제 데이터 → task -->
+  <script src="js/size.js"></script>
   <script src="js/script.js"></script>
   <script src="js/logger.js"></script>
   <script src="js/recognition.js"></script>
   <script src="js/conditions.js"></script>
+  <script src="js/scripts-data.js"></script>
   <script src="js/task.js"></script>
 </body>
 
