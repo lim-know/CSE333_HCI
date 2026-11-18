@@ -382,31 +382,115 @@ body.study .floating-toolbar {
 .desk {
   position: relative;
 }
-.target {
+/* 제시문 패널: 툴바 아래 가운데. 위에서는 필기 안 됨 */
+#passage {
   position: absolute;
-  padding: 6px 10px;
-  border: 2px dashed #b4bccd;
-  border-radius: 8px;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100% - 48px));
+  box-sizing: border-box;
+  z-index: 2;
+  padding: 18px 24px;
+  background: #fbfbfd;
+  border: 1px solid #d9dde6;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #0000000f;
+  font-size: 24px;
+  line-height: 2.3;
+  color: #263044;
+  word-break: keep-all;
+  touch-action: none;
 }
-.target-word {
-  font-size: 32px;
+.mark {
+  position: relative;
+  white-space: nowrap;
+}
+.mark-text {
+  padding: 0 2px;
+}
+.m-underline .mark-text {
+  border-bottom: 3px solid var(--ink);
+}
+.m-circle .mark-text {
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.m-highlight .mark-text {
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  border-radius: 3px;
+}
+.m-word .mark-text {
+  color: var(--ink);
+  font-weight: 700;
+}
+.mark-tag {
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 14px;
   font-weight: 600;
-  color: #263044;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: white;
 }
-.target.copy {
-  border: none;
-  padding: 0;
+.m-highlight .mark-tag {
+  color: #8a6a12;
 }
-.copy-text {
-  font-size: 28px;
-  color: #263044;
-  margin-bottom: 12px;
+.mark.current .mark-tag {
+  color: white;
+  background: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 30%, transparent);
 }
-.copy-area {
-  width: min(760px, 70vw);
-  height: 120px;
+.m-highlight.current .mark-tag {
+  color: #3b2d06;
+}
+.mark.done .mark-tag::after {
+  content: " ✓";
+}
+.mark.done .mark-tag,
+.mark.missed .mark-tag {
+  opacity: 0.45;
+}
+.mark.missed .mark-tag::after {
+  content: " ✕";
+}
+
+/* 옮겨 적는 칸 */
+.write-area {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100% - 48px));
   border: 2px dashed #b4bccd;
-  border-radius: 8px;
+  border-radius: 10px;
+  background: repeating-linear-gradient(to bottom, transparent 0 71px, #e3e6ee 71px 72px);
+}
+
+/* 알림 (다른 펜·굵기로 썼을 때, 표시가 남았는데 완료를 눌렀을 때) */
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 10px 18px;
+  font-size: 18px;
+  color: white;
+  background: #c2410c;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px #00000030;
+  pointer-events: none;
+}
+
+.cue-title {
+  margin-right: 16px;
+  font-size: 15px;
+  color: #6b7280;
 }
 
 #screen {

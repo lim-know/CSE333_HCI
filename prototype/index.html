@@ -64,7 +64,10 @@
 
     <!-- 필기 영역. 이 안에서 눌린 포인터는 로그에 source=canvas -->
     <main class="desk">
+      <!-- 제시문 (task.js). 이 위에서는 필기가 안 됨. 아래 점선 칸에 옮겨 적는다 -->
+      <div id="passage" hidden></div>
       <div id="target"></div>
+      <div id="toast" hidden></div>
       <div id="tune-slider">
         <div class="tune-track"></div>
         <div class="tune-thumb"></div>
@@ -120,12 +123,13 @@
     </div>
   </template>
 
-  <!-- 모듈 로딩 순서: size → script(필기) → logger → recognition → conditions → 과제 데이터 → task -->
+  <!-- 모듈 로딩 순서: size → script(필기) → logger → recognition → conditions → 제시문 해석 → 제시문 → task -->
   <script src="js/size.js"></script>
   <script src="js/script.js"></script>
   <script src="js/logger.js"></script>
   <script src="js/recognition.js"></script>
   <script src="js/conditions.js"></script>
+  <script src="js/passage.js"></script>
   <script src="js/scripts-data.js"></script>
   <script src="js/task.js"></script>
 </body>

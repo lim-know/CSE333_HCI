@@ -1,5 +1,5 @@
 // size.js, recognition.js, task.js 의 계산 부분을 브라우저 없이 확인한다.
-// 실행: node --test prototype/tests/
+// 실행: node --test prototype/tests/*.test.js
 "use strict";
 
 const assert = require("node:assert/strict");
@@ -145,28 +145,48 @@ test("배정표: 6가지 순서를 2명씩, 조건·세트 짝이 고르게", ()
   assert.deepEqual(Object.values(pairs).sort(), Array(9).fill(4));
 });
 
-test("임시 스크립트가 형식에 맞고, 매 단계 실제로 바꿔야 한다", () => {
+function loadPassages() {
   const context = {};
   vm.createContext(context);
-  const scripts = vm.runInContext(`${read("scripts-data.js")}\nSCRIPT_CSV;`, context);
-  for (const [id, text] of Object.entries(scripts)) {
-    const [header, ...rows] = text.trim().split("\n").map((l) => l.split(","));
-    const col = (row, name) => row[header.indexOf(name)];
-    let slot = 1;
-    const sizes = { 1: 1, 2: 1, 3: 4 };
-    for (const row of rows) {
-      assert.equal(col(row, "script_id"), id);
-      assert.ok(Number(col(row, "time_limit_ms")) > 0);
-      const type = col(row, "step_type");
-      if (type === "copy") continue;
-      if (type !== "size_only") {
-        assert.notEqual(Number(col(row, "target_slot")), slot, `${id}/${col(row, "step_id")}`);
-        slot = Number(col(row, "target_slot"));
-      }
-      if (type !== "switch_only") {
-        assert.notEqual(Number(col(row, "target_size")), sizes[slot], `${id}/${col(row, "step_id")}`);
-        sizes[slot] = Number(col(row, "target_size"));
-      }
-    }
-  }
+  const Passage = vm.runInContext(`${read("passage.js")}
+Passage;`, context);
+  const PASSAGES = vm.runInContext(`${read("scripts-data.js")}
+PASSAGES;`, context);
+  return { Passage, PASSAGES };
+}
+const SIZES = { 1: 1, 2: 1, 3: 4 };   // script.js DEFAULT_SIZES
+const plain = (v) => JSON.parse(JSON.stringify(v));   // vm 안에서 만든 배열 비교용
+
+test("제시문: 표시마다 바꾸기 + 본문으로 돌아가기 단계", () => {
+  const { Passage } = loadPassages();
+  const p = Passage.load("t", "가나 [빨강 2 밑줄|다라]를 쓴다. [형광 4 칠하기|마바] 끝", SIZES);
+  assert.deepEqual(plain(p.steps.map((s) => [s.task_type, s.step_type, s.slot, s.size])), [
+    ["underline", "switch_size", 2, 2],
+    ["return", "switch_only", 1, 1],
+    ["highlight", "switch_only", 3, 4],
+    ["return", "switch_only", 1, 1],
+  ]);
+  // 표시 바로 뒤에 표시가 오면 돌아가기 단계 없음, 끝이 표시면 돌아가기 없음
+  const q = Passage.load("t", "가 [빨강 2 밑줄|나] [검정 4 글씨|다]", SIZES);
+  assert.deepEqual(plain(q.steps.map((s) => s.task_type)), ["underline", "word"]);
+  assert.match(p.text, /^script_id,step_id,exp,step_type/);
+});
+
+test("제시문 표기 오류는 바로 알려 준다", () => {
+  const { Passage } = loadPassages();
+  assert.throws(() => Passage.load("t", "[파랑 2 밑줄|가]", SIZES), /펜 이름/);
+  assert.throws(() => Passage.load("t", "[빨강 2 줄|가]", SIZES), /표시 이름/);
+  assert.throws(() => Passage.load("t", "[검정 1 밑줄|가] 나", SIZES), /바꿀 게 없는/);
+  assert.throws(() => Passage.load("t", "가 [빨강 2 밑줄 나", SIZES), /닫히지 않은/);
+});
+
+test("임시 제시문: 모두 읽히고, 세트 A/B/C 는 구조가 같다", () => {
+  const { Passage, PASSAGES } = loadPassages();
+  const shape = (key) => Passage.load(key, PASSAGES[key], SIZES).steps
+    .map((s) => `${s.task_type}/${s.step_type}/${s.slot}/${s.size}`).join(" ");
+  assert.ok(Passage.load("practice", PASSAGES.practice, SIZES).steps.length > 0);
+  assert.equal(shape("A"), shape("B"));
+  assert.equal(shape("A"), shape("C"));
+  const types = Passage.load("A", PASSAGES.A, SIZES).steps.map((s) => s.step_type);
+  for (const t of ["switch_only", "size_only", "switch_size"]) assert.ok(types.includes(t), t);
 });
