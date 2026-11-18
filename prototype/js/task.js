@@ -2,11 +2,14 @@
 // 역할: 실험 진행
 //  - 시작 화면: 참가자 번호 → 조건 순서·제시문 세트를 배정표에서 자동으로 고름 (직접 바꿀 수도 있음)
 //  - 조건마다: 설명 → 연습 블록 → 본과제 블록 → 설문 안내
-//  - 단계마다: 상단 배너에 지시 하나 + 완료 버튼. 지시가 그려진 시각을 Logger.cueShown 으로 기록
-//  - 참가자에게 안 보이는 시간 제한(time_limit_ms)이 지나면 timeout 으로 넘어감
+//  - 블록 = 제시문 하나 (11/18 팀 결정). 위에 제시문, 아래 칸에 옮겨 적으면서 표시된 곳은 지정한 펜·굵기로 표시
+//  - 단계 = 펜 상태를 바꿔야 하는 곳 (passage.js). 지금 단계의 펜·굵기로 그은 획이 끝나면 다음 단계로
+//    → 단계 시작(cue_shown) = 앞 단계의 정답 획이 끝난 때. 전환 시간은 "이전 획 끝 → 정답 획"으로 본다
+//  - 다른 펜·굵기로 쓰면 알림. 표시가 남았는데 완료를 누르면 알림 (넘어가지 않음)
+//  - 참가자에게 안 보이는 단계별 시간 제한(time_limit_ms)이 지나면 timeout 으로 다음 단계
 //  - 블록이 끝날 때마다 로그 CSV 저장. 세션이 끝나면 sessions/participants 한 줄과 사용한 스크립트도 저장
 // 진행자 단축키: Ctrl+Shift+S = 이 단계 건너뛰기(skipped), Ctrl+Shift+Q = 세션 중단
-// 과제 내용은 scripts-data.js (실험 설계 담당: 최유진)
+// 제시문은 scripts-data.js (실험 설계 담당: 최유진)
 
 const Task = (() => {
   "use strict";
@@ -21,18 +24,19 @@ const Task = (() => {
     { conditions: ["C3", "C2", "C1"], sets: ["C", "A", "B"] },   // P11, P12
   ];
 
-  // 조건 설명 (진행 대본 확정 전 임시 문구. 최유진 검토)
+  // 과제 설명 (세 조건 공통) + 조건 설명. 진행 대본 확정 전 임시 문구 (최유진 검토)
+  const HOW_TO = `위의 제시문을 아래 칸에 옮겨 적으세요. 본문은 <b>검정 1pt</b>로 씁니다.
+    표시된 곳은 적힌 펜·굵기로 표시하세요: <b>밑줄</b>(단어 아래 선), <b>동그라미</b>(단어 둘레),
+    <b>칠하기</b>(단어 위를 형광펜으로 덧칠), <b>글씨</b>(그 펜으로 단어를 씀). 표시한 뒤에는 다시 검정 1pt로 이어 씁니다.`;
   const INTRO = {
-    C1: "위쪽 툴바에서 펜을 누르고, 툴바의 슬라이더로 굵기를 맞춘 뒤 표시하세요.",
-    C2: "펜은 위쪽 툴바에서 고르세요. 굵기는 왼손 손가락 하나를 화면에 대고, 펜을 화면에 댄 채 좌우로 움직여 맞춥니다. 펜을 떼면 확정됩니다.",
+    C1: "펜은 툴바에서 누르고, 굵기는 툴바의 슬라이더로 맞춥니다.",
+    C2: "펜은 툴바에서 고르세요. 굵기는 왼손 손가락 하나를 화면에 대고, 펜을 화면에 댄 채 좌우로 움직여 맞춥니다. 펜을 떼면 확정됩니다.",
     C3: "왼손 손가락 1개 = 검정 펜, 2개 = 빨간 펜, 3개 = 노란 형광펜입니다. 손가락을 화면에 댄 채 펜을 대면 펜이 바뀌고, 그대로 좌우로 움직이면 굵기가 바뀝니다. 펜을 떼면 확정됩니다.",
   };
-  const ACTION = {
-    underline: "밑줄 긋기", circle: "동그라미 치기", highlight: "덧칠하기",
-    word: "단어 쓰기", line: "선 긋기", copy: "따라 쓰기",
-  };
-  const DEFAULT_LIMIT_MS = 30000;
-  const BUILD = "exp-2026-11-17";   // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
+  const SIZE_TOL = 1.10;   // 분석(build_steps.py SIZE_TOL_RATIO)과 같은 기준
+  const sameSize = (a, b) => a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
+  const sameState = (stroke, want) => want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
+  const BUILD = "exp-2026-11-18";   // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
   Logger.configure({ build: BUILD });
 
   const $ = (selector) => document.querySelector(selector);
@@ -43,10 +47,13 @@ const Task = (() => {
   const homeButton = $("#home-button");
   const overlay = $("#screen");
   const target = $("#target");
+  const passage = $("#passage");
+  const toast = $("#toast");
   const desk = $(".desk");
 
   let session = null;      // 진행 중인 세션
-  let stepDone = null;     // 지금 단계를 끝내는 함수 (outcome) => void
+  let stepDone = null;     // 지금 단계를 끝내는 함수 (outcome) => void  (건너뛰기·중단용)
+  let blockDone = null;    // 완료 버튼을 눌렀을 때 부르는 함수
   let aborted = false;
   let closeScreen = null;  // 열린 안내 화면을 닫는 함수 (세션 중단용)
 
@@ -77,10 +84,12 @@ const Task = (() => {
     return body.map((values) => Object.fromEntries(header.map((key, i) => [key.trim(), (values[i] ?? "").trim()])));
   }
 
+  // practice → PASSAGES.practice, exp2A → PASSAGES.A
   function loadScript(id) {
-    const text = SCRIPT_CSV[id];
-    if (!text) throw new Error(`스크립트 없음: ${id} (scripts-data.js 확인)`);
-    return { id, text, steps: parseCsv(text) };
+    const key = id === "practice" ? "practice" : id.replace(/^exp2/, "");
+    const markup = PASSAGES[key];
+    if (!markup) throw new Error(`제시문 없음: ${key} (scripts-data.js 확인)`);
+    return Passage.load(id, markup, DEFAULT_SIZES, [...Size.PRESETS]);
   }
 
   // ---------- 화면 ----------
@@ -114,64 +123,148 @@ const Task = (() => {
 
   const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-  // 목표 위치에 단어(또는 따라 쓸 문장)를 띄운다. 화면 밖이면 안쪽으로 당긴다.
-  function showTarget(step) {
-    target.innerHTML = "";
-    const rect = desk.getBoundingClientRect();
-    const isCopy = step.step_type === "copy";
-    const box = document.createElement("div");
-    box.className = isCopy ? "target copy" : `target ${step.task_type}`;
-    box.innerHTML = isCopy
-      ? `<div class="copy-text">${escapeHtml(step.text)}</div><div class="copy-area"></div>`
-      : `<span class="target-word">${escapeHtml(step.text || "목표")}</span>`;
-    target.appendChild(box);
-    const w = box.offsetWidth;
-    const h = box.offsetHeight;
-    const x = Math.min(Math.max(Number(step.target_x) || rect.width / 2, 16), rect.width - w - 16);
-    const y = Math.min(Math.max(Number(step.target_y) || rect.height / 2, 96), rect.height - h - 16);
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
+  // ---------- 제시문 화면 ----------
+
+  const markColor = (slot) => PENS[slot].color;
+
+  // 제시문 패널을 그리고, 그 아래를 쓰는 칸으로 표시한다
+  function renderPassage(script) {
+    passage.innerHTML = script.parts.map((part) => {
+      if (part.kind === "text") return escapeHtml(part.text);
+      const tag = `${Passage.label(part.slot, part.size)} ${Passage.MARK_LABEL[part.mark]}`;
+      return `<span class="mark m-${part.mark}" data-no="${part.no}" style="--ink:${markColor(part.slot)}">`
+        + `<span class="mark-text">${escapeHtml(part.text)}</span><span class="mark-tag">${escapeHtml(tag)}</span></span>`;
+    }).join("");
+    passage.hidden = false;
+    const top = passage.offsetTop + passage.offsetHeight + 16;
+    target.innerHTML = `<div class="write-area" style="top:${top}px"></div>`;
   }
 
-  // ---------- 단계와 블록 ----------
+  function clearPassage() {
+    passage.hidden = true;
+    passage.innerHTML = "";
+    target.innerHTML = "";
+  }
 
-  function runStep(step, index, total) {
+  let toastTimer = null;
+  function showToast(text) {
+    toast.textContent = text;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, 2500);
+  }
+
+  // ---------- 블록 ----------
+  // 단계는 획으로 진행된다: 지금 단계의 펜·굵기로 그은 획이 끝나면 다음 단계.
+  // 마지막 단계는 완료 버튼을 누를 때 step_end (그 뒤 본문 필기도 단계 안에 남도록)
+
+  function runBlock(meta, script, title) {
     return new Promise((resolve) => {
+      Pen.reset();
       Ink.clear();
-      showTarget(step);
-      const action = ACTION[step.task_type] || step.task_type;
-      const cue = step.step_type === "copy"
-        ? `${escapeHtml(step.cue_text)}`
-        : `<strong>${escapeHtml(step.cue_text)}</strong><span class="cue-action">${escapeHtml(action)}</span>`;
-      setBanner(cue, `${index + 1} / ${total}`, true);
+      resetToolbarPosition();
+      Conditions.setup(meta.condition);
+      Logger.startBlock({ ...meta, script_id: script.id });
+      renderPassage(script);
       Ink.locked = false;
-      Logger.cueShown(step.step_id, { slot: Pen.slot, size: Pen.size });
 
-      const limit = Number(step.time_limit_ms) || DEFAULT_LIMIT_MS;
-      const timer = setTimeout(() => stepDone("timeout"), limit);
-      stepDone = (outcome) => {
-        if (!stepDone) return;
-        stepDone = null;
-        clearTimeout(timer);
-        Logger.stepEnd(outcome, { slot: Pen.slot, size: Pen.size });
-        resolve(outcome);
+      const steps = script.steps;
+      const marks = script.parts.filter((p) => p.kind === "mark").length;
+      let index = -1;
+      let reached = false;           // 지금 단계의 정답 획이 나왔는지 (마지막 단계용)
+      let prev = { ...Passage.BASE };  // 바로 앞에 요구된 상태. 이 상태로 쓰는 건 그냥 본문 필기
+      let timer = null;
+
+      const markEl = (no) => passage.querySelector(`.mark[data-no="${no}"]`);
+      const show = () => {
+        passage.querySelectorAll(".mark.current").forEach((el) => el.classList.remove("current"));
+        const step = steps[index];
+        const doneMarks = passage.querySelectorAll(".mark.done, .mark.missed").length;
+        let cue = "제시문을 끝까지 옮겨 적고 <strong>완료</strong>를 누르세요";
+        if (step && !reached) {
+          if (step.task_type === "return") cue = `다음: 본문 <strong>${escapeHtml(Passage.label(step.slot, step.size))}</strong>로 이어 쓰기`;
+          else {
+            markEl(step.mark_no)?.classList.add("current");
+            cue = `다음: <strong>${escapeHtml(step.cue_text)}</strong>`;
+          }
+        }
+        setBanner(`<span class="cue-title">${escapeHtml(title)}</span>${cue}`, `표시 ${doneMarks} / ${marks}`, true);
       };
-    });
-  }
 
-  async function runBlock(meta, script) {
-    Pen.reset();
-    Ink.clear();
-    resetToolbarPosition();
-    Conditions.setup(meta.condition);
-    Logger.startBlock({ ...meta, script_id: script.id });
-    for (let i = 0; i < script.steps.length && !aborted; i++) {
-      await runStep(script.steps[i], i, script.steps.length);
-    }
-    Ink.locked = true;
-    target.innerHTML = "";
-    setBanner("", "", false);
-    Logger.endBlock();
+      const begin = (i) => {
+        index = i;
+        reached = false;
+        const step = steps[i];
+        Logger.cueShown(step.step_id, { slot: Pen.slot, size: Pen.size });
+        timer = setTimeout(() => finish("timeout"), Number(step.time_limit_ms) || 60000);
+        show();
+      };
+
+      // 지금 단계를 끝내고 다음 단계로
+      const finish = (outcome) => {
+        clearTimeout(timer);
+        const step = steps[index];
+        if (!step) return;
+        Logger.stepEnd(outcome, { slot: Pen.slot, size: Pen.size });
+        if (step.task_type !== "return" && outcome !== "completed") markEl(step.mark_no)?.classList.add("missed");
+        prev = outcome === "completed" ? { slot: step.slot, size: step.size } : { slot: Pen.slot, size: Pen.size };
+        if (index + 1 < steps.length) begin(index + 1);
+        else { index = steps.length; show(); }
+      };
+
+      // 정답 획 (마지막 단계면 완료 버튼까지 단계를 열어 둔다)
+      const correct = () => {
+        const step = steps[index];
+        if (step.task_type !== "return") markEl(step.mark_no)?.classList.add("done");
+        if (index + 1 < steps.length) finish("completed");
+        else {
+          clearTimeout(timer);
+          reached = true;
+          prev = { slot: step.slot, size: step.size };
+          show();
+        }
+      };
+
+      Ink.onStroke = (stroke) => {
+        const step = steps[index];
+        if (!step || reached) return;
+        if (sameState(stroke, step)) correct();
+        else if (!sameState(stroke, prev)) {
+          showToast(`지금 ${Passage.label(stroke.slot, stroke.size)}입니다. 표시: ${step.task_type === "return" ? "본문 " + Passage.label(step.slot, step.size) : step.cue_text}`);
+        }
+      };
+
+      const end = (lastOutcome) => {
+        clearTimeout(timer);
+        if (index < steps.length) Logger.stepEnd(lastOutcome, { slot: Pen.slot, size: Pen.size });
+        Ink.onStroke = null;
+        Ink.locked = true;
+        stepDone = null;
+        blockDone = null;
+        clearPassage();
+        setBanner("", "", false);
+        Logger.endBlock();
+        resolve();
+      };
+
+      // 진행자: 건너뛰기(skipped) / 중단
+      stepDone = (outcome) => {
+        if (aborted) return end(outcome);
+        if (index >= steps.length) return;
+        if (reached) return end("completed");
+        finish(outcome);
+      };
+
+      blockDone = () => {
+        if (index < steps.length && !reached) {
+          showToast("아직 표시하지 않은 곳이 있어요");
+          return;
+        }
+        end("completed");
+      };
+
+      begin(0);
+    });
   }
 
   // ---------- 세션 ----------
@@ -231,7 +324,7 @@ const Task = (() => {
         const set = s.order.sets[k];
         await showScreen(
           `<p class="screen-step">${k + 1} / 3</p><h1>방법 ${k + 1}</h1>
-           <p>${INTRO[condition]}</p><p class="screen-note">진행자: 조건 ${condition}, 제시문 세트 ${set}</p>`,
+           <p>${HOW_TO}</p><p>${INTRO[condition]}</p><p class="screen-note">진행자: 조건 ${condition}, 제시문 세트 ${set}</p>`,
           [["연습 시작", true]],
         );
         if (aborted) break;
@@ -240,14 +333,14 @@ const Task = (() => {
         if (s.practice) {
           const practice = loadScript("practice");
           s.scripts.set(practice.id, practice);
-          await runBlock({ ...base, block: ++block, phase: "practice" }, practice);
+          await runBlock({ ...base, block: ++block, phase: "practice" }, practice, `방법 ${k + 1} · 연습`);
           if (aborted) break;
           await showScreen("<h1>연습 끝</h1><p>준비되면 본과제를 시작하세요.</p>", [["본과제 시작", true]]);
           if (aborted) break;
         }
         const main = loadScript(`exp2${set}`);
         s.scripts.set(main.id, main);
-        await runBlock({ ...base, block: ++block, phase: "main" }, main);
+        await runBlock({ ...base, block: ++block, phase: "main" }, main, `방법 ${k + 1}`);
         if (aborted) break;
         if (k < 2) {
           await showScreen(
@@ -291,7 +384,7 @@ const Task = (() => {
     Ink.locked = true;
     Ink.allowEraser = true;
     document.body.classList.remove("study", "free");
-    target.innerHTML = "";
+    clearPassage();
     setBanner("Count &amp; Tune 실험", "", false);
     homeButton.hidden = true;
     Ink.clear();
@@ -353,7 +446,7 @@ const Task = (() => {
   // ---------- 버튼·단축키 ----------
 
   doneButton.addEventListener("click", () => {
-    if (stepDone) stepDone("completed");
+    if (blockDone) blockDone();
   });
   homeButton.addEventListener("click", home);
 
