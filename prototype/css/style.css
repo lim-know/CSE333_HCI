@@ -14,10 +14,54 @@ body {
 #cue-banner {
   height: 60px;
   flex-shrink: 0;
-  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
   font-size: 20px;
   background: #f3f4f6;
   border-bottom: 1px solid #d1d5db;
+}
+#cue-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#cue-text strong {
+  font-size: 24px;
+}
+.cue-action {
+  margin-left: 14px;
+  color: #647087;
+  font-size: 18px;
+}
+#cue-progress {
+  color: #8a93a6;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.banner-button {
+  height: 44px;
+  min-width: 120px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 10px;
+  background: #3b5bdb;
+  color: white;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.banner-button.secondary,
+button.secondary {
+  background: #e8ebf3;
+  color: #263044;
+}
+[hidden] {
+  display: none !important;
 }
 /* 추가 */
 :root {
@@ -242,6 +286,7 @@ body {
   width: 16px;
   height: 16px;
   background: #252b37;
+  box-shadow: 0 0 0 1px #00000040;
   border: 2px solid white;
   border-radius: 50%;
   transform: translate(-50%, -50%);
@@ -255,8 +300,228 @@ body {
   font-weight: 600;
 }
 
+.tune-tick,
+.size-tick {
+  position: absolute;
+  top: 24px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  background: #8a93a6;
+  border-radius: 1px;
+}
+
+.pen-tip.highlighter {
+  opacity: 0.6;
+}
+
 /* ---- conditions.js (강민진) ---- */
 
+/* C1 굵기 슬라이더: C2·C3 펜 드래그와 같은 길이·같은 스냅 */
+#size-slider {
+  position: relative;
+  height: 44px;
+  margin: 0 8px;
+  touch-action: none;
+  cursor: pointer;
+}
+#size-slider .size-track {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #c5cad6;
+  border-radius: 2px;
+}
+#size-slider .size-tick {
+  top: 14px;
+}
+#size-slider .size-thumb {
+  position: absolute;
+  top: 22px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border: 2px solid #3b5bdb;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* 슬라이더는 C1만. C3는 툴바가 표시만 하고 누를 수 없음 */
+body:not([data-condition="C1"]) #size-slider,
+body:not([data-condition="C1"]) .thickness + #size-slider {
+  display: none;
+}
+body[data-condition="C3"] .pen-tool {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* 실험 모드: 실행 취소·지우기·툴바 이동 숨김 */
+body.study #undo,
+body.study #redo,
+body.study #clear,
+body.study .toolbar-divider.history,
+body.study .drag-handle {
+  display: none;
+}
+body.study .floating-toolbar {
+  padding-left: 16px;
+}
+
 /* ---- task.js (강민진) ---- */
+
+#target {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.desk {
+  position: relative;
+}
+.target {
+  position: absolute;
+  padding: 6px 10px;
+  border: 2px dashed #b4bccd;
+  border-radius: 8px;
+}
+.target-word {
+  font-size: 32px;
+  font-weight: 600;
+  color: #263044;
+}
+.target.copy {
+  border: none;
+  padding: 0;
+}
+.copy-text {
+  font-size: 28px;
+  color: #263044;
+  margin-bottom: 12px;
+}
+.copy-area {
+  width: min(760px, 70vw);
+  height: 120px;
+  border: 2px dashed #b4bccd;
+  border-radius: 8px;
+}
+
+#screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f6f7fbf2;
+}
+.screen-card {
+  width: min(640px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 32px;
+  background: white;
+  border: 1px solid #e8eaf0;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px #0000001a;
+  font-size: 20px;
+  line-height: 1.6;
+}
+.screen-card h1 {
+  margin: 0 0 12px;
+  font-size: 28px;
+}
+.screen-step,
+.screen-note,
+.form-hint {
+  color: #8a93a6;
+  font-size: 14px;
+}
+.screen-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+.screen-buttons button,
+.free-mode button {
+  height: 48px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 10px;
+  background: #3b5bdb;
+  color: white;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: #647087;
+}
+.form-grid input,
+.form-grid select {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+  color: #263044;
+}
+.check {
+  display: block;
+  margin-top: 14px;
+  font-size: 16px;
+}
+.form-error {
+  min-height: 1em;
+  color: #c92a2a;
+  font-size: 14px;
+}
+.free-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e8eaf0;
+  font-size: 14px;
+  color: #647087;
+}
+.free-mode span {
+  flex: 1;
+}
+.free-mode button {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 16px;
+}
+ul.saved {
+  padding-left: 18px;
+  font-size: 14px;
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #3b5bdb;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
 
 /* ---- recognition.js 피드백: 미리보기 링 등 (노태림) ---- */
