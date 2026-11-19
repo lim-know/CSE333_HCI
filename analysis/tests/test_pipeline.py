@@ -15,7 +15,7 @@ from build_steps import build_steps  # noqa: E402
 from logdata import (  # noqa: E402
     EVENT_COLUMNS, SCHEMA_VERSION, SCRIPT_COLUMNS, Dataset, load_dataset, parse_detail,
 )
-from replay_thresholds import replay  # noqa: E402
+from replay_thresholds import replay, threshold_table  # noqa: E402
 from validate_log import validate  # noqa: E402
 
 SAMPLE = ANALYSIS.parent / "data" / "sample"
@@ -41,7 +41,8 @@ class Log:
         return self.add(t, "block_start", detail="build=t;still_px=12;still_ms=120;epoch_ms=1")
 
     def ink(self, t, step, slot, size):
-        self.add(t, "pointerdown", step_id=step, pointer_id=1, pointer_type="pen", x=1.0, y=1.0, n_touch=0, n_still=0)
+        self.add(t, "pointerdown", step_id=step, source="canvas", pointer_id=1, pointer_type="pen",
+                 x=1.0, y=1.0, n_touch=0, n_still=0)
         self.add(t, "ink_start", step_id=step, slot=slot, size=size)
         self.add(t + 50, "pointerup", step_id=step, pointer_id=1, pointer_type="pen", x=2.0, y=1.0)
         return self.add(t + 50, "ink_end", step_id=step, slot=slot, size=size)
@@ -167,6 +168,20 @@ class BuildStepsTest(unittest.TestCase):
             row = steps_of(log, script(("s1", step_type, slot, None))).iloc[0]
             self.assertEqual(row.n_possible_missed, expected, step_type)
 
+    def test_ui_pen_taps_are_not_canvas_pen_downs(self):
+        log = Log().start()
+        log.add(1000, "cue_shown", step_id="s1", slot=1, size=1.0)
+        log.add(1100, "pointerdown", step_id="s1", source="ui", pointer_id=1, pointer_type="pen",
+                x=1.0, y=1.0, n_touch=2, n_still=0)   # 손을 올린 채 툴바를 누름
+        log.ink(1300, "s1", 2, 1.0)
+        log.add(1500, "pointerdown", step_id="s1", source="ui", pointer_id=1, pointer_type="pen",
+                x=1.0, y=1.0, n_touch=0, n_still=0)   # 완료 버튼
+        log.add(1550, "step_end", step_id="s1", detail="outcome=completed")
+        row = steps_of(log, script(("s1", "switch_only", 2, None))).iloc[0]
+        self.assertEqual(row.n_pen_downs, 1)
+        self.assertEqual(row.n_possible_missed, 0)
+        self.assertEqual(row.duration, 550)
+
     def test_parse_detail(self):
         self.assertEqual(parse_detail("outcome=timeout;still_px=12"), {"outcome": "timeout", "still_px": "12"})
         self.assertEqual(parse_detail(None), {})
@@ -195,6 +210,26 @@ class ReplayTest(unittest.TestCase):
         log.add(600, "pointerdown", pointer_id=1, pointer_type="pen", x=5.0, y=5.0, n_touch=1, n_still=0)
         result = replay(log.frame(), 20, 80)
         self.assertEqual(result.iloc[1].n_touch, 1)
+
+    def test_touch_to_pen_window_drops_resting_fingers(self):
+        events = self._log().frame()
+        result = replay(events, 20, 80)
+        self.assertEqual(result.iloc[0].touch_to_pen_ms, 100)   # 마지막 손가락(100ms)부터 펜(200ms)까지
+        self.assertEqual(replay(events, 20, 80, touch_to_pen_ms=150).iloc[0].n_still_replay, 1)
+        self.assertEqual(replay(events, 20, 80, touch_to_pen_ms=250).iloc[0].n_still_replay, 2)
+
+    def test_ui_taps_are_not_replayed(self):
+        log = self._log()
+        log.add(300, "pointerdown", source="ui", pointer_id=1, pointer_type="pen", x=5.0, y=5.0, n_touch=2, n_still=2)
+        self.assertEqual(len(replay(log.frame(), 12, 120)), 1)
+
+    def test_threshold_table_splits_switch_and_copy(self):
+        data = load_dataset(SAMPLE)
+        table = threshold_table(data.events, data.scripts, [(12, 120)], [None, 1])
+        no_window, tiny_window = table.iloc[0], table.iloc[1]
+        self.assertGreater(no_window["switch_인식"], 0)
+        self.assertEqual(no_window["copy_인식"], 1)   # P00 C3 s04 의 먹힌 획
+        self.assertEqual(tiny_window["switch_인식"], 0)
 
 
 class ValidateTest(unittest.TestCase):
@@ -242,6 +277,37 @@ class ValidateTest(unittest.TestCase):
         self.data.participants = participants
         self.assertTrue(any("모국어" in e for e in self._errors()))
 
+    def test_detects_missing_time_limit(self):
+        scripts = self.data.scripts.copy()
+        scripts.loc[scripts.index[0], "time_limit_ms"] = None
+        self.data.scripts = scripts
+        self.assertTrue(any("time_limit_ms" in e for e in self._errors()))
+
+    def test_detects_non_korean_copy_text(self):
+        scripts = self.data.scripts.copy()
+        scripts.loc[scripts["step_type"] == "copy", "language"] = "en"
+        self.data.scripts = scripts
+        self.assertTrue(any("language" in e for e in self._errors()))
+
+    def test_detects_pen_down_without_source(self):
+        events = self.data.events.copy()
+        pen_down = events[(events["event"] == "pointerdown") & (events["pointer_type"] == "pen")].index[0]
+        events.loc[pen_down, "source"] = pd.NA
+        self.data.events = events
+        self.assertTrue(any("source" in e for e in self._errors()))
+
+    def test_warns_when_timeout_comes_too_early(self):
+        scripts = self.data.scripts.copy()
+        scripts["time_limit_ms"] = 99999999.0
+        self.data.scripts = scripts
+        errors, warnings = validate(self.data)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("전에 timeout" in w for w in warnings))
+
+    def test_sample_timeout_matches_its_limit(self):
+        warnings = validate(self.data)[1]
+        self.assertFalse(any("제한 시간" in w for w in warnings), warnings)
+
     def test_detects_step_outside_script(self):
         events = self.data.events.copy()
         cue = events[events["event"] == "cue_shown"].index[0]
@@ -272,7 +338,9 @@ class SampleTest(unittest.TestCase):
         self.assertEqual(unresolved["outcome"], "timeout")
         self.assertTrue(pd.isna(unresolved["time_cue_to_correct"]))
         self.assertEqual(indexed.loc[("P01", "C2", "exp2", "s02"), "n_pointercancel"], 1)
-        self.assertEqual(set(steps.loc[steps["step_type"] == "copy", "language"]), {"ko", "en"})
+        self.assertEqual(set(steps.loc[steps["step_type"] == "copy", "language"]), {"ko"})
+        completed = steps[steps["outcome"] == "completed"]
+        self.assertTrue((completed["duration"] <= completed["time_limit_ms"]).all())
 
 
 if __name__ == "__main__":

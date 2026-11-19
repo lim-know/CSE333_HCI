@@ -10,9 +10,13 @@ import sys
 import pandas as pd
 
 from logdata import (
-    APP_EVENTS, CONDITIONS, EXPS, LANGUAGES, OUTCOMES, PHASES, POINTER_EVENTS,
-    POINTER_TYPES, SCHEMA_VERSION, STEP_TYPES, Dataset, load_dataset, parse_detail,
+    APP_EVENTS, CONDITIONS, EXPS, GESTURE_CONDITIONS, LANGUAGES, OUTCOMES, PHASES,
+    POINTER_EVENTS, POINTER_SOURCES, POINTER_TYPES, SCHEMA_VERSION, STEP_TYPES, Dataset,
+    load_dataset, parse_detail,
 )
+
+# 시간 제한과 실제 단계 길이를 비교할 때의 여유 (ms)
+LIMIT_SLACK_MS = 500
 
 
 def _unknown(series: pd.Series, allowed: set[str]) -> list[str]:
@@ -38,6 +42,8 @@ def _check_scripts(scripts: pd.DataFrame, errors: list[str]) -> None:
             errors.append(f"{where}: target_slot 없음")
         if row.step_type in ("size_only", "switch_size") and pd.isna(row.target_size):
             errors.append(f"{where}: target_size 없음")
+        if pd.isna(row.time_limit_ms) or row.time_limit_ms <= 0:
+            errors.append(f"{where}: time_limit_ms 없음 (안전용 시간 제한은 단계마다 필수)")
 
 
 def _check_block(key: tuple, block: pd.DataFrame, scripts: pd.DataFrame,
@@ -61,6 +67,9 @@ def _check_block(key: tuple, block: pd.DataFrame, scripts: pd.DataFrame,
     pen_downs = block[(block["event"] == "pointerdown") & (block["pointer_type"] == "pen")]
     if pen_downs[["n_touch", "n_still"]].isna().any().any():
         errors.append(f"{label}: 펜 pointerdown 에 n_touch/n_still 누락")
+    bad_source = _unknown(pen_downs["source"].fillna("(빈칸)"), POINTER_SOURCES)
+    if bad_source:
+        errors.append(f"{label}: 펜 pointerdown 의 source 는 canvas/ui 여야 함 ({bad_source})")
     pointer_rows = block[block["event"].isin(POINTER_EVENTS)]
     if pointer_rows[["pointer_id", "pointer_type", "x", "y"]].isna().any().any():
         errors.append(f"{label}: 포인터 이벤트의 ID, 종류, 좌표 누락")
@@ -102,18 +111,33 @@ def _check_block(key: tuple, block: pd.DataFrame, scripts: pd.DataFrame,
     missing_end = cued - set(ends["step_id"].dropna())
     if missing_end:
         errors.append(f"{label}: step_end 없음 {sorted(missing_end)}")
+    limits = expected.set_index("step_id")["time_limit_ms"]
+    cue_times = cues.drop_duplicates("step_id").set_index("step_id")["t_event"]
     for row in ends.itertuples():
         outcome = parse_detail(row.detail).get("outcome")
         if outcome not in OUTCOMES:
             errors.append(f"{label}/{row.step_id}: outcome 값 오류 ({outcome})")
-        elif outcome != "completed":
+            continue
+        if outcome != "completed":
             warnings.append(f"{label}/{row.step_id}: {outcome}")
+        if row.step_id not in cue_times.index or row.step_id not in limits.index:
+            continue
+        limit = limits[row.step_id]
+        if pd.isna(limit):
+            continue
+        duration = row.t_event - cue_times[row.step_id]
+        if outcome == "timeout" and duration < limit - LIMIT_SLACK_MS:
+            warnings.append(f"{label}/{row.step_id}: 제한 시간({limit:g}ms) 전에 timeout ({duration:.0f}ms)")
+        if outcome == "completed" and duration > limit + LIMIT_SLACK_MS:
+            warnings.append(f"{label}/{row.step_id}: 제한 시간({limit:g}ms)을 넘겼는데 completed ({duration:.0f}ms)")
     if (block["event"] == "block_start").any():
         start = block[block["event"] == "block_start"].iloc[0]
         details = parse_detail(start["detail"])
         missing = [k for k in ("build", "still_px", "still_ms", "epoch_ms") if k not in details]
         if missing:
             errors.append(f"{label}: block_start detail 누락 {missing}")
+        if block["condition"].iloc[0] in GESTURE_CONDITIONS and "touch_to_pen_ms" not in details:
+            warnings.append(f"{label}: block_start 에 touch_to_pen_ms 없음 (손→펜 간격 기준이 기록되지 않음)")
 
 
 def validate(data: Dataset) -> tuple[list[str], list[str]]:

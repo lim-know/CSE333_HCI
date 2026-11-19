@@ -41,7 +41,7 @@ cd analysis
 | `validate_log.py` | 세션 직후 로그 점검 (누락, 순서 오류 등) |
 | `build_steps.py` | 원시 이벤트로 단계별 분석 표 생성 |
 | `analyze.py` | 로그 점검 후 기술통계 출력 |
-| `replay_thresholds.py` | 정지 임계값을 바꿔 재계산 |
+| `replay_thresholds.py` | 정지 임계값과 손→펜 간격을 바꿔 재계산 (`--still 12 120 --window 500 1000`) |
 | `make_sample_data.py` | 테스트용 가짜 데이터 생성 |
 
 테스트는 `analysis` 폴더에서 `..\.venv\Scripts\python -m unittest discover -s tests`로 실행합니다.
@@ -58,7 +58,7 @@ cd analysis
 
 | 마일스톤 | 기한 | 내용 |
 |---|---|---|
-| 로그 형식 합의 | 11/1 (일) | CSV 컬럼 확정 |
+| 로그 형식 합의 | 11/4 (수) 완료 | v1.0 확정 (PR #1), 같은 날 설계 결정 반영해 v1.1 |
 | Prototype v0 | 11/6 (금) | C1·C2·C3 + 연습 블록 + 로그 |
 | Pilot | 11/15 (일) | 파일럿 3~4명, 임계값·스크립트 확정 |
 | Half Report | 11/16–20 | 파일럿 결과 포함 |
