@@ -16,12 +16,12 @@ const Task = (() => {
 
   // 조건 순서 6가지 × 2명, 제시문 세트도 같이 돌림 (11/15 안건 문서 표)
   const ORDERS = [
-    { conditions: ["C1", "C2", "C3"], sets: ["A", "B", "C"] },   // P01, P02
-    { conditions: ["C1", "C3", "C2"], sets: ["A", "B", "C"] },   // P03, P04
-    { conditions: ["C2", "C1", "C3"], sets: ["B", "C", "A"] },   // P05, P06
-    { conditions: ["C2", "C3", "C1"], sets: ["C", "A", "B"] },   // P07, P08
-    { conditions: ["C3", "C1", "C2"], sets: ["B", "C", "A"] },   // P09, P10
-    { conditions: ["C3", "C2", "C1"], sets: ["C", "A", "B"] },   // P11, P12
+    { conditions: ["C1", "C2", "C3"], sets: ["A", "B", "C"] }, // P01, P02
+    { conditions: ["C1", "C3", "C2"], sets: ["A", "B", "C"] }, // P03, P04
+    { conditions: ["C2", "C1", "C3"], sets: ["B", "C", "A"] }, // P05, P06
+    { conditions: ["C2", "C3", "C1"], sets: ["C", "A", "B"] }, // P07, P08
+    { conditions: ["C3", "C1", "C2"], sets: ["B", "C", "A"] }, // P09, P10
+    { conditions: ["C3", "C2", "C1"], sets: ["C", "A", "B"] }, // P11, P12
   ];
 
   // 과제 설명 (세 조건 공통) + 조건 설명. 진행 대본 확정 전 임시 문구 (최유진 검토)
@@ -33,10 +33,12 @@ const Task = (() => {
     C2: "펜은 툴바에서 고르세요. 굵기는 왼손 손가락 하나를 화면에 대고, 펜을 화면에 댄 채 좌우로 움직여 맞춥니다. 펜을 떼면 확정됩니다.",
     C3: "왼손 손가락 1개 = 검정 펜, 2개 = 빨간 펜, 3개 = 노란 형광펜입니다. 손가락을 화면에 댄 채 펜을 대면 펜이 바뀌고, 그대로 좌우로 움직이면 굵기가 바뀝니다. 펜을 떼면 확정됩니다.",
   };
-  const SIZE_TOL = 1.10;   // 분석(build_steps.py SIZE_TOL_RATIO)과 같은 기준
-  const sameSize = (a, b) => a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
-  const sameState = (stroke, want) => want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
-  const BUILD = "exp-2026-11-18";   // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
+  const SIZE_TOL = 1.1; // 분석(build_steps.py SIZE_TOL_RATIO)과 같은 기준
+  const sameSize = (a, b) =>
+    a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
+  const sameState = (stroke, want) =>
+    want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
+  const BUILD = "exp-2026-11-18"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
   Logger.configure({ build: BUILD });
 
   const $ = (selector) => document.querySelector(selector);
@@ -51,11 +53,11 @@ const Task = (() => {
   const toast = $("#toast");
   const desk = $(".desk");
 
-  let session = null;      // 진행 중인 세션
-  let stepDone = null;     // 지금 단계를 끝내는 함수 (outcome) => void  (건너뛰기·중단용)
-  let blockDone = null;    // 완료 버튼을 눌렀을 때 부르는 함수
+  let session = null; // 진행 중인 세션
+  let stepDone = null; // 지금 단계를 끝내는 함수 (outcome) => void  (건너뛰기·중단용)
+  let blockDone = null; // 완료 버튼을 눌렀을 때 부르는 함수
   let aborted = false;
-  let closeScreen = null;  // 열린 안내 화면을 닫는 함수 (세션 중단용)
+  let closeScreen = null; // 열린 안내 화면을 닫는 함수 (세션 중단용)
 
   // ---------- 스크립트 ----------
 
@@ -67,29 +69,55 @@ const Task = (() => {
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
       if (quoted) {
-        if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
-        else if (c === '"') quoted = false;
+        if (c === '"' && text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else if (c === '"') quoted = false;
         else field += c;
       } else if (c === '"') quoted = true;
-      else if (c === ",") { row.push(field); field = ""; }
-      else if (c === "\n" || c === "\r") {
+      else if (c === ",") {
+        row.push(field);
+        field = "";
+      } else if (c === "\n" || c === "\r") {
         if (c === "\r" && text[i + 1] === "\n") i++;
-        row.push(field); field = "";
+        row.push(field);
+        field = "";
         if (row.some((v) => v !== "")) rows.push(row);
         row = [];
       } else field += c;
     }
-    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    if (field !== "" || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
     const [header, ...body] = rows;
-    return body.map((values) => Object.fromEntries(header.map((key, i) => [key.trim(), (values[i] ?? "").trim()])));
+    return body.map((values) =>
+      Object.fromEntries(
+        header.map((key, i) => [key.trim(), (values[i] ?? "").trim()]),
+      ),
+    );
   }
 
   // practice → PASSAGES.practice, exp2A → PASSAGES.A
-  function loadScript(id) {
+  function loadScript(id, markupIndex = 0) {
     const key = id === "practice" ? "practice" : id.replace(/^exp2/, "");
-    const markup = PASSAGES[key];
-    if (!markup) throw new Error(`제시문 없음: ${key} (scripts-data.js 확인)`);
-    return Passage.load(id, markup, DEFAULT_SIZES, [...Size.PRESETS]);
+    const data = PASSAGES[key];
+    if (!data) throw new Error(`제시문 없음: ${key} (scripts-data.js 확인)`);
+
+    // 배열인 경우 해당 인덱스의 항목 선택, 문자열인 경우 그대로 사용
+    const markup = Array.isArray(data) ? data[markupIndex] : data;
+    if (!markup)
+      throw new Error(`제시문 인덱스 범위 초과: ${key}[${markupIndex}]`);
+
+    // 배열인 경우 블록 번호를 ID에 포함 (exp2A_0, exp2A_1 등)
+    const scriptId = Array.isArray(data) ? `${id}_${markupIndex}` : id;
+    return Passage.load(scriptId, markup, DEFAULT_SIZES, [...Size.PRESETS]);
+  }
+
+  // 제시문 세트의 길이 반환 (배열이면 길이, 문자열이면 1)
+  function getPassageCount(key) {
+    const data = PASSAGES[key];
+    return Array.isArray(data) ? data.length : 1;
   }
 
   // ---------- 화면 ----------
@@ -108,7 +136,10 @@ const Task = (() => {
         const button = document.createElement("button");
         button.textContent = label;
         if (cls) button.className = cls;
-        button.addEventListener("click", () => closeScreen && closeScreen(value));
+        button.addEventListener(
+          "click",
+          () => closeScreen && closeScreen(value),
+        );
         row.appendChild(button);
       }
       overlay.hidden = false;
@@ -121,7 +152,11 @@ const Task = (() => {
     doneButton.hidden = !done;
   }
 
-  const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const escapeHtml = (s) =>
+    String(s).replace(
+      /[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+    );
 
   // ---------- 제시문 화면 ----------
 
@@ -129,12 +164,26 @@ const Task = (() => {
 
   // 제시문 패널을 그리고, 그 아래를 쓰는 칸으로 표시한다
   function renderPassage(script) {
-    passage.innerHTML = script.parts.map((part) => {
-      if (part.kind === "text") return escapeHtml(part.text);
-      const tag = `${Passage.label(part.slot, part.size)} ${Passage.MARK_LABEL[part.mark]}`;
-      return `<span class="mark m-${part.mark}" data-no="${part.no}" style="--ink:${markColor(part.slot)}">`
-        + `<span class="mark-text">${escapeHtml(part.text)}</span><span class="mark-tag">${escapeHtml(tag)}</span></span>`;
-    }).join("");
+    passage.innerHTML = script.parts
+      .map((part) => {
+        if (part.kind === "text") return escapeHtml(part.text);
+        const tag = `${Passage.label(part.slot, part.size)} ${Passage.MARK_LABEL[part.mark]}`;
+        // 굵기에 따라 font-weight 적용 (CSS 범위: 100~900)
+        const fontWeightMap = {
+          0.5: 300,
+          1: 400,
+          2: 500,
+          4: 700,
+          6: 800,
+          8: 900,
+        };
+        const fontWeight = fontWeightMap[part.size] || 400;
+        return (
+          `<span class="mark m-${part.mark}" data-no="${part.no}" style="--ink:${markColor(part.slot)}; font-weight:${fontWeight}">` +
+          `<span class="mark-text">${escapeHtml(part.text)}</span><span class="mark-tag">${escapeHtml(tag)}</span></span>`
+        );
+      })
+      .join("");
     passage.hidden = false;
     const top = passage.offsetTop + passage.offsetHeight + 16;
     target.innerHTML = `<div class="write-area" style="top:${top}px"></div>`;
@@ -151,7 +200,9 @@ const Task = (() => {
     toast.textContent = text;
     toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toast.hidden = true; }, 2500);
+    toastTimer = setTimeout(() => {
+      toast.hidden = true;
+    }, 2500);
   }
 
   // ---------- 블록 ----------
@@ -171,24 +222,33 @@ const Task = (() => {
       const steps = script.steps;
       const marks = script.parts.filter((p) => p.kind === "mark").length;
       let index = -1;
-      let reached = false;           // 지금 단계의 정답 획이 나왔는지 (마지막 단계용)
-      let prev = { ...Passage.BASE };  // 바로 앞에 요구된 상태. 이 상태로 쓰는 건 그냥 본문 필기
+      let reached = false; // 지금 단계의 정답 획이 나왔는지 (마지막 단계용)
+      let prev = { ...Passage.BASE }; // 바로 앞에 요구된 상태. 이 상태로 쓰는 건 그냥 본문 필기
       let timer = null;
 
       const markEl = (no) => passage.querySelector(`.mark[data-no="${no}"]`);
       const show = () => {
-        passage.querySelectorAll(".mark.current").forEach((el) => el.classList.remove("current"));
+        passage
+          .querySelectorAll(".mark.current")
+          .forEach((el) => el.classList.remove("current"));
         const step = steps[index];
-        const doneMarks = passage.querySelectorAll(".mark.done, .mark.missed").length;
+        const doneMarks = passage.querySelectorAll(
+          ".mark.done, .mark.missed",
+        ).length;
         let cue = "제시문을 끝까지 옮겨 적고 <strong>완료</strong>를 누르세요";
         if (step && !reached) {
-          if (step.task_type === "return") cue = `다음: 본문 <strong>${escapeHtml(Passage.label(step.slot, step.size))}</strong>로 이어 쓰기`;
+          if (step.task_type === "return")
+            cue = `다음: 본문 <strong>${escapeHtml(Passage.label(step.slot, step.size))}</strong>로 이어 쓰기`;
           else {
             markEl(step.mark_no)?.classList.add("current");
             cue = `다음: <strong>${escapeHtml(step.cue_text)}</strong>`;
           }
         }
-        setBanner(`<span class="cue-title">${escapeHtml(title)}</span>${cue}`, `표시 ${doneMarks} / ${marks}`, true);
+        setBanner(
+          `<span class="cue-title">${escapeHtml(title)}</span>${cue}`,
+          `표시 ${doneMarks} / ${marks}`,
+          true,
+        );
       };
 
       const begin = (i) => {
@@ -196,7 +256,10 @@ const Task = (() => {
         reached = false;
         const step = steps[i];
         Logger.cueShown(step.step_id, { slot: Pen.slot, size: Pen.size });
-        timer = setTimeout(() => finish("timeout"), Number(step.time_limit_ms) || 60000);
+        timer = setTimeout(
+          () => finish("timeout"),
+          Number(step.time_limit_ms) || 60000,
+        );
         show();
       };
 
@@ -206,16 +269,24 @@ const Task = (() => {
         const step = steps[index];
         if (!step) return;
         Logger.stepEnd(outcome, { slot: Pen.slot, size: Pen.size });
-        if (step.task_type !== "return" && outcome !== "completed") markEl(step.mark_no)?.classList.add("missed");
-        prev = outcome === "completed" ? { slot: step.slot, size: step.size } : { slot: Pen.slot, size: Pen.size };
+        if (step.task_type !== "return" && outcome !== "completed")
+          markEl(step.mark_no)?.classList.add("missed");
+        prev =
+          outcome === "completed"
+            ? { slot: step.slot, size: step.size }
+            : { slot: Pen.slot, size: Pen.size };
         if (index + 1 < steps.length) begin(index + 1);
-        else { index = steps.length; show(); }
+        else {
+          index = steps.length;
+          show();
+        }
       };
 
       // 정답 획 (마지막 단계면 완료 버튼까지 단계를 열어 둔다)
       const correct = () => {
         const step = steps[index];
-        if (step.task_type !== "return") markEl(step.mark_no)?.classList.add("done");
+        if (step.task_type !== "return")
+          markEl(step.mark_no)?.classList.add("done");
         if (index + 1 < steps.length) finish("completed");
         else {
           clearTimeout(timer);
@@ -230,13 +301,16 @@ const Task = (() => {
         if (!step || reached) return;
         if (sameState(stroke, step)) correct();
         else if (!sameState(stroke, prev)) {
-          showToast(`지금 ${Passage.label(stroke.slot, stroke.size)}입니다. 표시: ${step.task_type === "return" ? "본문 " + Passage.label(step.slot, step.size) : step.cue_text}`);
+          showToast(
+            `지금 ${Passage.label(stroke.slot, stroke.size)}입니다. 표시: ${step.task_type === "return" ? "본문 " + Passage.label(step.slot, step.size) : step.cue_text}`,
+          );
         }
       };
 
       const end = (lastOutcome) => {
         clearTimeout(timer);
-        if (index < steps.length) Logger.stepEnd(lastOutcome, { slot: Pen.slot, size: Pen.size });
+        if (index < steps.length)
+          Logger.stepEnd(lastOutcome, { slot: Pen.slot, size: Pen.size });
         Ink.onStroke = null;
         Ink.locked = true;
         stepDone = null;
@@ -256,10 +330,11 @@ const Task = (() => {
       };
 
       blockDone = () => {
-        if (index < steps.length && !reached) {
-          showToast("아직 표시하지 않은 곳이 있어요");
-          return;
-        }
+        // 미완료 시 경고 메시지 (기존 코드)
+        // if (index < steps.length && !reached) {
+        //   showToast("아직 표시하지 않은 곳이 있어요");
+        //   return;
+        // }
         end("completed");
       };
 
@@ -276,10 +351,12 @@ const Task = (() => {
   }
 
   function csvLine(values) {
-    return values.map((v) => {
-      const s = v === undefined || v === null ? "" : String(v);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(",");
+    return values
+      .map((v) => {
+        const s = v === undefined || v === null ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      })
+      .join(",");
   }
 
   function downloadText(name, text) {
@@ -295,26 +372,93 @@ const Task = (() => {
 
   // 분석 폴더에 넣을 sessions/participants 한 줄, 사용한 스크립트
   function saveSessionFiles(s) {
-    const browser = (navigator.userAgentData?.brands || [])
-      .filter((b) => !/Not.?A.?Brand/i.test(b.brand))
-      .map((b) => `${b.brand} ${b.version}`).join(" / ") || navigator.userAgent;
-    const sessionCols = ["session_id", "participant", "condition_order", "script_variant", "date", "device",
-      "browser", "windows", "screen_w", "screen_h", "dpr", "experimenter", "notes"];
-    const sessionRow = [s.session_id, s.participant, s.order.conditions.join("-"), s.order.sets.join("-"),
-      new Date().toISOString().slice(0, 10), "", browser, "", window.screen.width, window.screen.height,
-      window.devicePixelRatio, s.experimenter, s.aborted ? "세션 중단됨" : ""];
-    downloadText(`session_${s.session_id}.csv`, `${csvLine(sessionCols)}\n${csvLine(sessionRow)}\n`);
+    console.log("saveSessionFiles called - final save");
+    const browser =
+      (navigator.userAgentData?.brands || [])
+        .filter((b) => !/Not.?A.?Brand/i.test(b.brand))
+        .map((b) => `${b.brand} ${b.version}`)
+        .join(" / ") || navigator.userAgent;
+    const sessionCols = [
+      "session_id",
+      "participant",
+      "condition_order",
+      "script_variant",
+      "date",
+      "device",
+      "browser",
+      "windows",
+      "screen_w",
+      "screen_h",
+      "dpr",
+      "experimenter",
+      "notes",
+    ];
+    const sessionRow = [
+      s.session_id,
+      s.participant,
+      s.order.conditions.join("-"),
+      s.order.sets.join("-"),
+      new Date().toISOString().slice(0, 10),
+      "",
+      browser,
+      "",
+      window.screen.width,
+      window.screen.height,
+      window.devicePixelRatio,
+      s.experimenter,
+      s.aborted ? "세션 중단됨" : "",
+    ];
+    downloadText(
+      `session_${s.session_id}.csv`,
+      `${csvLine(sessionCols)}\n${csvLine(sessionRow)}\n`,
+    );
 
-    const partCols = ["participant", "handedness", "native_language", "note_language", "tablet_note_months"];
-    const partRow = [s.participant, s.handedness, "ko", s.note_language, s.tablet_note_months];
-    downloadText(`participant_${s.participant}.csv`, `${csvLine(partCols)}\n${csvLine(partRow)}\n`);
+    const partCols = [
+      "participant",
+      "handedness",
+      "native_language",
+      "note_language",
+      "tablet_note_months",
+    ];
+    const partRow = [
+      s.participant,
+      s.handedness,
+      "ko",
+      s.note_language,
+      s.tablet_note_months,
+    ];
+    downloadText(
+      `participant_${s.participant}.csv`,
+      `${csvLine(partCols)}\n${csvLine(partRow)}\n`,
+    );
+  }
 
-    for (const script of s.scripts.values()) downloadText(`script_${script.id}.csv`, script.text);
+  // 조건별 script 저장 (각 조건 끝마다 호출)
+  function saveConditionFiles(conditionScripts) {
+    console.log("saveConditionFiles called");
+    /*for (const script of conditionScripts.values())
+      downloadText(`script_${script.id}.csv`, script.text);*/
+  }
+
+  // 조건의 모든 블록 로그를 한번에 다운로드 (endBlock 호출로 저장된 것들)
+  function downloadConditionLogs(sessionId, blockStartNum, blockCount) {
+    console.log(
+      `downloadConditionLogs: blocks ${blockStartNum} to ${blockStartNum + blockCount - 1}`,
+    );
+    // Logger.savedBlocks()에서 해당 범위의 블록만 필터링해서 다운로드
+    const saved = Logger.savedBlocks().filter((name) =>
+      name.includes(`_${sessionId}_`),
+    );
+
+    // 현재 조건의 블록들만 선택 (이전 조건의 것은 이미 다운로드됨)
+    for (let i = 0; i < blockCount && i < saved.length; i++) {
+      Logger.redownload(saved[i]);
+    }
   }
 
   async function runSession(s) {
     document.body.classList.add("study");
-    Ink.allowEraser = false;
+    Ink.allowEraser = true; //지우개 가능
     aborted = false;
     s.scripts = new Map();
     let block = 0;
@@ -328,20 +472,65 @@ const Task = (() => {
           [["연습 시작", true]],
         );
         if (aborted) break;
+
+        // 조건 시작: 로그 자동 다운로드 비활성화 (조건 끝에 한번에 저장)
+        Logger.configure({ download: false });
+
         Conditions.setup(condition);
-        const base = { session_id: s.session_id, participant: s.participant, condition, exp: "exp2" };
+        const base = {
+          session_id: s.session_id,
+          participant: s.participant,
+          condition,
+          exp: "exp2",
+        };
         if (s.practice) {
           const practice = loadScript("practice");
           s.scripts.set(practice.id, practice);
-          await runBlock({ ...base, block: ++block, phase: "practice" }, practice, `방법 ${k + 1} · 연습`);
+          await runBlock(
+            { ...base, block: ++block, phase: "practice" },
+            practice,
+            `방법 ${k + 1} · 연습`,
+          );
           if (aborted) break;
-          await showScreen("<h1>연습 끝</h1><p>준비되면 본과제를 시작하세요.</p>", [["본과제 시작", true]]);
+          await showScreen(
+            "<h1>연습 끝</h1><p>준비되면 본과제를 시작하세요.</p>",
+            [["본과제 시작", true]],
+          );
           if (aborted) break;
         }
-        const main = loadScript(`exp2${set}`);
-        s.scripts.set(main.id, main);
-        await runBlock({ ...base, block: ++block, phase: "main" }, main, `방법 ${k + 1}`);
-        if (aborted) break;
+        const main_count = getPassageCount(set);
+        const conditionScripts = new Map(); // 이 조건의 script만 저장
+        for (let m = 0; m < main_count && !aborted; m++) {
+          const main = loadScript(`exp2${set}`, m);
+          s.scripts.set(main.id, main);
+          conditionScripts.set(main.id, main); // 이 조건의 script에도 추가
+          await runBlock(
+            { ...base, block: ++block, phase: "main" },
+            main,
+            `방법 ${k + 1} · 과제 ${m + 1}/${main_count}`,
+          );
+          if (aborted) break;
+        }
+
+        // 각 조건이 끝났을 때 이 조건의 모든 블록 로그를 한번에 다운로드
+        if (!aborted) {
+          // 블록 개수: 연습(1) + 본과제(main_count)
+          const blockCount = (s.practice ? 1 : 0) + main_count;
+          const blockStart = block - blockCount + 1;
+
+          // Logger에 로그 다운로드 활성화
+          Logger.configure({ download: true });
+
+          // 현재 조건의 모든 블록 로그 다운로드
+          downloadConditionLogs(s.session_id, blockStart, blockCount);
+
+          // 다음 조건을 위해 다시 비활성화
+          Logger.configure({ download: false });
+
+          // script 저장
+          saveConditionFiles(conditionScripts);
+        }
+
         if (k < 2) {
           await showScreen(
             "<h1>이 방법은 끝났습니다</h1><p>설문(NASA-TLX)을 작성해 주세요. 잠시 쉬었다가 다음으로 넘어갑니다.</p>",
@@ -354,27 +543,41 @@ const Task = (() => {
       alertScreen(`오류: ${escapeHtml(error.message)}`);
     }
     s.aborted = aborted;
+    // 로그 다운로드 다시 활성화 (브라우저 백업 목록 표시용)
+    Logger.configure({ download: true });
+    // 세션 완료 시 최종 session/participant 파일 저장
     saveSessionFiles(s);
     stepDone = null;
-    const saved = Logger.savedBlocks().filter((name) => name.includes(`_${s.session_id}_`));
-    const list = saved.map((name) => `<li><button class="link" data-name="${escapeHtml(name)}">${escapeHtml(name)}</button></li>`).join("");
+    const saved = Logger.savedBlocks().filter((name) =>
+      name.includes(`_${s.session_id}_`),
+    );
+    const list = saved
+      .map(
+        (name) =>
+          `<li><button class="link" data-name="${escapeHtml(name)}">${escapeHtml(name)}</button></li>`,
+      )
+      .join("");
     const end = showScreen(
       `<h1>${aborted ? "세션 중단" : "실험 끝"}</h1>
        <p>${aborted ? "" : "마지막 설문과 선호 순위를 진행해 주세요. "}다운로드 폴더의 파일을 팀 드라이브로 옮겨 주세요.</p>
        <p class="screen-note">브라우저에 백업된 블록 (누르면 다시 받기)</p><ul class="saved">${list}</ul>`,
       [["처음 화면", true]],
     );
-    overlay.querySelectorAll("button.link").forEach((b) => b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      Logger.redownload(b.dataset.name);
-    }));
+    overlay.querySelectorAll("button.link").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        Logger.redownload(b.dataset.name);
+      }),
+    );
     await end;
     document.body.classList.remove("study");
     home();
   }
 
   function alertScreen(html) {
-    return showScreen(`<h1>문제가 생겼어요</h1><p>${html}</p>`, [["확인", true]]);
+    return showScreen(`<h1>문제가 생겼어요</h1><p>${html}</p>`, [
+      ["확인", true],
+    ]);
   }
 
   // ---------- 처음 화면 ----------
@@ -406,11 +609,16 @@ const Task = (() => {
       const f = form.elements;
       const conditions = f.order.value.trim().toUpperCase().split("-");
       const sets = f.sets.value.trim().toUpperCase().split("-");
-      const valid = conditions.length === 3 && new Set(conditions).size === 3 && conditions.every((c) => /^C[123]$/.test(c))
-        && sets.length === 3 && sets.every((v) => /^[ABC]$/.test(v));
+      const valid =
+        conditions.length === 3 &&
+        new Set(conditions).size === 3 &&
+        conditions.every((c) => /^C[123]$/.test(c)) &&
+        sets.length === 3 &&
+        sets.every((v) => /^[ABC]$/.test(v));
       const participant = f.participant.value.trim().toUpperCase();
       if (!valid || !/^[A-Z]+\d+$/.test(participant)) {
-        form.querySelector(".form-error").textContent = "참가자 번호(P01), 조건 순서(C1-C2-C3), 세트(A-B-C)를 확인해 주세요.";
+        form.querySelector(".form-error").textContent =
+          "참가자 번호(P01), 조건 순서(C1-C2-C3), 세트(A-B-C)를 확인해 주세요.";
         return;
       }
       overlay.hidden = true;
@@ -427,9 +635,11 @@ const Task = (() => {
       runSession(session);
     });
 
-    overlay.querySelectorAll("[data-free]").forEach((button) => button.addEventListener("click", () => {
-      startFree(button.dataset.free);
-    }));
+    overlay.querySelectorAll("[data-free]").forEach((button) =>
+      button.addEventListener("click", () => {
+        startFree(button.dataset.free);
+      }),
+    );
   }
 
   // 자유 모드: 로그 없이 조건만 바꿔서 써 보기 (실행 취소·지우개 사용 가능)
