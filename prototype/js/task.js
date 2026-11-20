@@ -38,7 +38,7 @@ const Task = (() => {
     a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
   const sameState = (stroke, want) =>
     want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
-  const BUILD = "exp-2026-11-18"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
+  const BUILD = "exp-2026-11-21"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
   Logger.configure({ build: BUILD });
 
   const $ = (selector) => document.querySelector(selector);
@@ -331,10 +331,11 @@ const Task = (() => {
 
       blockDone = () => {
         // 미완료 시 경고 메시지 (기존 코드)
-        // if (index < steps.length && !reached) {
-        //   showToast("아직 표시하지 않은 곳이 있어요");
-        //   return;
-        // }
+        if (index < steps.length && !reached) {
+          showToast("아직 표시하지 않은 곳이 있어요");
+          end("skipped");
+          return;
+        }
         end("completed");
       };
 
@@ -436,24 +437,8 @@ const Task = (() => {
   // 조건별 script 저장 (각 조건 끝마다 호출)
   function saveConditionFiles(conditionScripts) {
     console.log("saveConditionFiles called");
-    /*for (const script of conditionScripts.values())
-      downloadText(`script_${script.id}.csv`, script.text);*/
-  }
-
-  // 조건의 모든 블록 로그를 한번에 다운로드 (endBlock 호출로 저장된 것들)
-  function downloadConditionLogs(sessionId, blockStartNum, blockCount) {
-    console.log(
-      `downloadConditionLogs: blocks ${blockStartNum} to ${blockStartNum + blockCount - 1}`,
-    );
-    // Logger.savedBlocks()에서 해당 범위의 블록만 필터링해서 다운로드
-    const saved = Logger.savedBlocks().filter((name) =>
-      name.includes(`_${sessionId}_`),
-    );
-
-    // 현재 조건의 블록들만 선택 (이전 조건의 것은 이미 다운로드됨)
-    for (let i = 0; i < blockCount && i < saved.length; i++) {
-      Logger.redownload(saved[i]);
-    }
+    for (const script of conditionScripts.values())
+      downloadText(`script_${script.id}.csv`, script.text);
   }
 
   async function runSession(s) {
@@ -473,8 +458,8 @@ const Task = (() => {
         );
         if (aborted) break;
 
-        // 조건 시작: 로그 자동 다운로드 비활성화 (조건 끝에 한번에 저장)
-        Logger.configure({ download: false });
+        // 블록 로그 자동 다운로드 활성화 (매 블록 끝마다 다운로드)
+        Logger.configure({ download: true });
 
         Conditions.setup(condition);
         const base = {
@@ -512,22 +497,8 @@ const Task = (() => {
           if (aborted) break;
         }
 
-        // 각 조건이 끝났을 때 이 조건의 모든 블록 로그를 한번에 다운로드
+        // 각 조건이 끝났을 때 이 조건의 script 저장
         if (!aborted) {
-          // 블록 개수: 연습(1) + 본과제(main_count)
-          const blockCount = (s.practice ? 1 : 0) + main_count;
-          const blockStart = block - blockCount + 1;
-
-          // Logger에 로그 다운로드 활성화
-          Logger.configure({ download: true });
-
-          // 현재 조건의 모든 블록 로그 다운로드
-          downloadConditionLogs(s.session_id, blockStart, blockCount);
-
-          // 다음 조건을 위해 다시 비활성화
-          Logger.configure({ download: false });
-
-          // script 저장
           saveConditionFiles(conditionScripts);
         }
 
@@ -543,8 +514,6 @@ const Task = (() => {
       alertScreen(`오류: ${escapeHtml(error.message)}`);
     }
     s.aborted = aborted;
-    // 로그 다운로드 다시 활성화 (브라우저 백업 목록 표시용)
-    Logger.configure({ download: true });
     // 세션 완료 시 최종 session/participant 파일 저장
     saveSessionFiles(s);
     stepDone = null;
