@@ -75,9 +75,17 @@ const Recognition = (() => {
 
   function stillCount(now) {
     let n = 0;
+    const details = [];
     for (const touch of touches.values()) {
-      if (!touch.palm && now - touch.at >= config.stillMs) n += 1;
+      const isStill = !touch.palm && now - touch.at >= config.stillMs;
+      details.push(
+        `palm=${touch.palm}, elapsed=${Math.round(now - touch.at)}ms, still=${isStill}`,
+      );
+      if (isStill) n += 1;
     }
+    /*console.log(
+      `[stillCount] n=${n}, touches.size=${touches.size}, details=[${details.join(" | ")}]`,
+    );*/
     return n;
   }
 
@@ -91,11 +99,12 @@ const Recognition = (() => {
   function setState(next) {
     if (next === state) return;
 
-    // IDLE → ARMED 전환 시 펜 슬롯 확정 (손가락 정지 감지)
+    // IDLE → ARMED 전환 시 펜 슬롯 확정 (손가락 개수로 판정)
     if (state === "IDLE" && next === "ARMED" && mode === "count") {
-      const nStill = stillCount(performance.now());
-      if (nStill >= 1 && nStill <= config.maxFingers) {
-        Pen.setSlot(nStill, "gesture"); // 손가락 개수로 펜 선택
+      const nFingers = touches.size;
+      console.log(`[setState] nFingers=${nFingers}`);
+      if (nFingers >= 1 && nFingers <= config.maxFingers) {
+        Pen.setSlot(nFingers, "gesture"); // 손가락 개수로 펜 선택
       }
     }
 
@@ -129,11 +138,13 @@ const Recognition = (() => {
   // 제스처로 처리했으면 true. 이 펜 다운에는 잉크를 남기지 않는다.
   function penDown(event) {
     if (mode === "off") return false;
-    // ARMED 상태에서만 제스처 처리 (손가락 1~3개가 이미 정지한 상태)
+    // ARMED 상태에서만 제스처 처리
     if (state !== "ARMED") return false;
 
-    const nStill = stillCount(event.timeStamp);
-    if (nStill < 1 || nStill > config.maxFingers) return false;
+    // stillCount() 대신 touches.size 사용: 현재 화면에 닿은 손가락 개수
+    const nFingers = touches.size;
+    console.log(`[penDown] nFingers=${nFingers}`);
+    if (nFingers < 1 || nFingers > config.maxFingers) return false;
 
     // 펜 슬롯은 ARMED 상태 진입 시 이미 확정됨 (setState 함수 참조)
     const slot = Pen.slot;
@@ -145,7 +156,7 @@ const Recognition = (() => {
       size: sizeAfter,
       rec_state: "ARMED",
       n_touch: touches.size,
-      n_still: nStill,
+      n_still: nFingers,
     });
 
     // 드래그 준비 (굵기 조절 시작)
