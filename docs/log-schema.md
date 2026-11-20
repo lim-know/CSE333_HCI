@@ -1,4 +1,4 @@
-# 로그 형식 v1.1
+# 로그 형식 v1.2 (제안, 합의 전)
 
 담당: 구현(노태림) + 분석(정원준). **바꿀 때는 두 사람이 합의하고 이 문서부터 고친다.**
 코드 기준은 `analysis/logdata.py`이며, 이 문서와 함께 고친다.
@@ -8,12 +8,63 @@
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | 1.0 | 11/4 | 최초 확정 (PR #1, 노태림 승인) |
+| 1.2 (제안) | 11/20 | 제시문형 과제(PR #10)와 PR #11 반영: 단계 정의, `return` 단계, 완료를 일찍 누르면 `skipped`, 굵기 1~8pt, `build`로 버전 구분, `activation`의 `n_still` 뜻 변경. 11/21에 PR #11 `f140813`과 11/20 파일럿 결과로 갱신. 아래 [v1.2 변경 제안과 PR 의존 관계](#v12-변경-제안과-pr-의존-관계) 참고. **노태림 합의 전** |
 | 1.1 | 11/4 | 11/4 설계 결정 반영: 따라쓰기 한국어 고정, 완료 버튼, 단계별 시간 제한(`time_limit_ms`), 펜 다운의 `source`(canvas/ui), 손→펜 간격 기준 기록(`touch_to_pen_ms`), participants의 `english_proficiency` 삭제 |
 
 v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 가지다.
 1. 펜 `pointerdown`/`pointerup`에 `source`를 적는다. 필기 영역이면 `canvas`, 툴바·슬라이더·완료 버튼이면 `ui`.
 2. `block_start` detail에 `touch_to_pen_ms`를 적는다. 상한을 쓰지 않으면 `touch_to_pen_ms=none`.
 3. 스크립트의 `time_limit_ms`가 지나면 `step_end`를 `outcome=timeout`으로 남기고 다음 단계로 간다.
+
+## v1.2 변경 제안과 PR 의존 관계
+
+11/18 팀 결정으로 과제가 **제시문형**으로 바뀌었다 (위 제시문을 아래 칸에 옮겨 쓰면서, 표시된 곳만 지정한 펜·굵기로 표시).
+이에 맞춰 아래를 바꾼다. **열(컬럼)은 그대로**이고, 값의 뜻과 규칙이 바뀐다.
+
+### 바뀌는 것
+
+| # | 항목 | v1.1 | v1.2 |
+|---|---|---|---|
+| 1 | 단계 | 지시 하나 = 단계 하나, 완료 버튼으로 끝남 | **펜 상태를 바꿔야 하는 곳 = 단계.** 표시마다 "표시 상태로" 단계, 뒤에 본문이 이어지면 "본문으로 돌아가기" 단계(`task_type=return`) |
+| 2 | 단계 진행 | 완료 버튼 | 목표 상태로 그은 획이 끝나면 자동으로 다음 단계. 마지막 단계만 완료 버튼 |
+| 3 | `cue_shown` | 지시가 화면에 그려진 때 | 앞 단계 정답 획이 끝나 다음 표시가 강조된 때. **주 지표의 기준점이 아니다** (분석 계획 4.1) |
+| 4 | `step_end` outcome | completed / timeout / skipped | 값은 그대로. 표시가 남은 채 완료를 누르면 **진행 중 단계는 `skipped`**, 남은 단계는 `step_end`가 없다 (단계표와 비교해 찾는다). 진행자 건너뛰기(`s` 키)와는 다음 이벤트로 구분한다: `skipped` 바로 뒤가 `block_end`면 참가자가 완료를 누른 것, 다음 단계의 `cue_shown`이면 진행자 |
+| 5 | `step_type` | `copy` 있음 | `copy` 없음. switch_only / size_only / switch_size |
+| 6 | 굵기 | 프리셋 0.5·1·2·4·8pt, 로그 눈금 | 1~8pt, 선형 눈금. **프리셋은 정수 8개**이고 근처(`snap_px`)에 오면 프리셋에 붙는다. 그 사이는 0.1pt 단위 값이 나온다. `on_preset`은 정수면 1 |
+| 7 | C3 슬롯 변경 | 펜 다운(`activation`) 때 | 손가락이 멈춘 순간(IDLE→ARMED) **닿아 있는 손가락 수**로 정하고, 그 뒤에 닿는 손가락은 반영하지 않는다 (팀 결정 11/20). `slot_change`(source=gesture)가 `activation` 없이 생길 수 있다 |
+| 8 | 지우개 | 실험 중 끔 | 실험 중 켬. 새 이벤트 없이 펜 `pointerdown`의 `buttons`(32 또는 2)로 찾는다 |
+| 9 | `script_id` | `exp2A` | 제시문마다 `exp2A_0` ~ `exp2A_4` |
+| 10 | `build` | 권장 | **필수, 코드를 고칠 때마다 바꾼다.** 분석은 이 값으로 버전별 규칙을 고른다 |
+| 11 | `activation`의 `n_still` | 정지로 판정된 손가락 수 | **닿아 있는 손가락 수** (PR #11 `0cf62ef`부터). 정지 손가락 수는 펜 `pointerdown` 줄의 `n_still`을 쓴다 (그쪽은 v1.1 그대로) |
+
+저장 규칙(블록마다 파일 저장, 단계표 `script_*.csv` 저장)은 **v1.1 그대로 유지**한다. `exp-2026-11-21`부터 블록이 끝날 때마다 `events`, 조건이 끝날 때 본과제 `script` 5개, 세션이 끝날 때 `session`·`participant`를 내려받는다 (세션당 35개, [장비 체크리스트](device-setup.md)).
+브라우저 백업(localStorage)은 한도가 약 5MB라 블록 3~4개만 남는다 (11/20 파일럿). **대비책으로 믿지 않는다.**
+
+### PR 의존 관계
+
+v1.2의 일부는 PR #11(리뷰 중)에 기대고 있다. **PR이 머지되지 않거나 일부만 반영되면, 해당 항목만 "안 되면" 칸으로 돌아간다.** 문서 전체를 되돌리지 않는다.
+
+"PR #11에 반영"은 prototype2 브랜치에 들어갔지만 PR #11이 아직 머지되지 않았다는 뜻이다.
+
+| 항목 (위 표 #) | 근거 | 상태 (11/21) | 안 되면 |
+|---|---|---|---|
+| 1, 2, 3, 5 | PR #10 | 머지됨 | — (확정) |
+| 단계 순서: 글씨 먼저, 밑줄·동그라미·칠하기 나중 | PR #11 | 리뷰 중. 파일럿에서 "본문 먼저, 표시는 뒤로" 의견 | PR #10의 읽는 순서. 열과 규칙은 같다 |
+| 4 완료 시 `skipped` | PR #11 `f140813` | PR #11에 반영 | 완료로 끝난 블록의 마지막 단계는 분석에서 뺀다 |
+| 6 굵기 | PR #11 | 팀 확인 (11/20) | v1.1 프리셋 |
+| 7 C3 슬롯 변경 시점 | PR #11 `0cf62ef` | 팀 결정 (11/20). PR #11에 반영 | v1.1 (펜 다운 때) |
+| 8 지우개 | PR #11 | 팀 확인 (11/20) | v1.1 (실험 중 끔) |
+| 9 `script_id` | PR #11 | 리뷰 중 | v1.1 |
+| 10 `build` | PR #11 `f140813` | PR #11에 반영 (`exp-2026-11-21`) | `sessions.csv` notes에 사용한 브랜치·커밋을 적는다 |
+| 11 `activation`의 `n_still` | PR #11 `0cf62ef` | PR #11에 반영 | v1.1 (정지 손가락 수) |
+| 저장 규칙 유지 | PR #11 `f140813` | PR #11에 반영 | 단계표는 코드에서 다시 만든다. 빠진 블록은 결측 처리 (브라우저 백업은 대비책이 아니다) |
+
+### 버전 구분
+
+| `build` 값 | 코드 | 적용 |
+|---|---|---|
+| `exp-2026-11-18` | PR #10 (prototype 6b56854), PR #11 (7e8c4bb, 0cf62ef) **모두** | 이 값만으로는 구분이 안 된다. 11/20 파일럿은 시각으로 구분한다: 11:04 전 세션은 `7e8c4bb`, 뒤는 `0cf62ef` |
+| `exp-2026-11-21` | PR #11 `f140813` (블록마다 다운로드, script 저장, 완료 시 `skipped`) | v1.2 |
 
 ## 원칙
 
@@ -77,7 +128,8 @@ v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 �
 | step_end | 단계 종료 | step_id, slot, size, detail: `outcome=completed/timeout/skipped` |
 
 `step_end`의 outcome은 아래처럼 정한다.
-- **completed:** 참가자가 완료 버튼을 눌렀다. 버튼을 누른 펜 탭은 `source=ui`인 pointerdown/up으로 남고, 그 직후에 `step_end`를 남긴다.
+- **completed:** v1.2: 목표 상태로 그은 획이 끝났다 (마지막 단계는 그 뒤 완료 버튼). v1.1: 참가자가 완료 버튼을 눌렀다. 버튼을 누른 펜 탭은 `source=ui`인 pointerdown/up으로 남고, 그 직후에 `step_end`를 남긴다.
+- **완료를 일찍 누른 경우 (v1.2):** 새 값을 만들지 않는다. 진행 중 단계는 `skipped`, 남은 단계는 `step_end` 없음. 구분법은 위 v1.2 표 4번.
 - **timeout:** 스크립트의 `time_limit_ms`가 지났다. 참가자에게 제한 시간은 보이지 않는다. 인식이 계속 실패해 단계에 갇히는 것을 막는 안전장치다.
 - **skipped:** 진행자가 건너뛰었다 (장비 문제 등). 이유는 `sessions.csv`의 `notes`에 적는다.
 | toolbar_tap | 툴바 펜 선택 | source, slot, size |
@@ -140,8 +192,8 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 |---|---|---|
 | script_id, step_id | exp2C, s03 | 둘을 합쳐 고유해야 함 |
 | exp | exp2 | exp1 / exp2 |
-| step_type | switch_size | switch_only / size_only / switch_size / copy |
-| task_type | circle | underline / highlight / circle / word / copy / line 등 |
+| step_type | switch_size | switch_only / size_only / switch_size (v1.1의 copy는 v1.2에서 없음) |
+| task_type | circle | underline / highlight / circle / word / return(본문으로 돌아가기, v1.2) |
 | language | ko | 쓰는 언어. 11/4 결정으로 **ko만 허용**. 언어가 없는 과제는 빈칸. copy는 필수 |
 | cue_text | 빨간 펜 2pt | 상단 배너에 보이는 지시 (펜 이름 + 굵기) |
 | target_slot | 3 | 빈칸 = 슬롯을 평가하지 않음 |
@@ -189,7 +241,7 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 - [ ] (노태림, 정원준) 손→펜 간격 규칙. 손가락이 닿은 뒤 몇 ms 안에 펜이 와야 제스처로 볼지 (`touch_to_pen_ms`). 내부 테스트 로그를 `replay_thresholds.py --window`로 다시 계산해 전환 단계는 살리고 따라쓰기 단계는 걸러지는 값을 고른다. DualKey, Consecutive Distant Taps 논문 참고
 - [ ] (최유진) 단계별 `time_limit_ms` 값
 - [ ] (최유진, 강민진) 슬롯별 굵기 기억 여부. `switch_only`의 굵기 평가 방식에 영향
-- [ ] (전원) 주 지표. 제안: `time_cue_to_correct`(지시 → 첫 정답 획), 보조로 `duration`. `time_prev_ink_to_correct`(Proposal)도 계산되므로 파일럿 전에 하나를 주 지표로 정한다.
+- [x] (전원) 주 지표: `time_prev_ink_to_correct`(제안서 정의). 11/18 제시문형 결정으로 지시 시점보다 "이전 필기 획 끝"이 자연스러워졌다. v1.2에서 `t_prev_ink_end`는 첫 조작 직전에 끝난 필기 획으로 바꾼다 ([분석 계획](analysis-plan.md) 4.1)
 - [ ] (파일럿 후) 굵기 정답 허용 범위. 잠정값: 목표의 1.10배 이내 (`SIZE_TOL_RATIO`)
-- [ ] (파일럿 후) 의도치 않은 발동의 정의. 잠정값: copy 구간의 모든 `activation`
+- [ ] (파일럿 후) 의도치 않은 발동의 정의. v1.1 잠정값(copy 구간의 모든 `activation`)은 copy 단계가 없어져 못 쓴다. 후보는 [분석 계획](analysis-plan.md) 4.3
 - [ ] (파일럿 후) 인식 실패 후보의 정의. 잠정값: 전환 단계에서 손가락이 닿았지만 `n_still = 0`인 펜 다운
