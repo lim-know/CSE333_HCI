@@ -19,23 +19,28 @@ const Recognition = (() => {
     stillPx: 12,
     stillMs: 120,
     maxFingers: 3,
-    palmPx: 0,              // 0 = 끔
-    areaSelector: ".desk",  // 이 안에 닿은 손가락만 센다
+    palmPx: 0, // 0 = 끔
+    areaSelector: ".desk", // 이 안에 닿은 손가락만 센다
   };
 
-  let mode = "off";            // off | size | count
-  const touches = new Map();   // pointerId -> { ax, ay, at, palm }
+  let mode = "off"; // off | size | count
+  const touches = new Map(); // pointerId -> { ax, ay, at, palm }
   let state = "IDLE";
-  let tuning = null;           // { pointerId, startX, startSize }
+  let tuning = null; // { pointerId, startX, startSize }
   let timer = null;
 
-  const isPalm = (e) => config.palmPx > 0 && Math.max(e.width || 0, e.height || 0) > config.palmPx;
+  const isPalm = (e) =>
+    config.palmPx > 0 && Math.max(e.width || 0, e.height || 0) > config.palmPx;
 
   // ---------- 손가락 추적 ----------
 
   function inArea(event) {
     const target = event.target;
-    return Boolean(target && typeof target.closest === "function" && target.closest(config.areaSelector));
+    return Boolean(
+      target &&
+      typeof target.closest === "function" &&
+      target.closest(config.areaSelector),
+    );
   }
 
   function onTouch(event) {
@@ -43,13 +48,21 @@ const Recognition = (() => {
     const t = event.timeStamp;
     if (event.type === "pointerdown") {
       if (!inArea(event)) return;
-      touches.set(event.pointerId, { ax: event.clientX, ay: event.clientY, at: t, palm: isPalm(event) });
+      touches.set(event.pointerId, {
+        ax: event.clientX,
+        ay: event.clientY,
+        at: t,
+        palm: isPalm(event),
+      });
     } else if (event.type === "pointermove") {
       const touch = touches.get(event.pointerId);
       if (!touch) return;
       if (isPalm(event)) touch.palm = true;
       // 기준점에서 STILL_PX 넘게 움직이면 기준점을 옮기고 시간을 다시 잰다
-      if (Math.hypot(event.clientX - touch.ax, event.clientY - touch.ay) > config.stillPx) {
+      if (
+        Math.hypot(event.clientX - touch.ax, event.clientY - touch.ay) >
+        config.stillPx
+      ) {
         touch.ax = event.clientX;
         touch.ay = event.clientY;
         touch.at = t;
@@ -62,9 +75,17 @@ const Recognition = (() => {
 
   function stillCount(now) {
     let n = 0;
+    const details = [];
     for (const touch of touches.values()) {
-      if (!touch.palm && now - touch.at >= config.stillMs) n += 1;
+      const isStill = !touch.palm && now - touch.at >= config.stillMs;
+      details.push(
+        `palm=${touch.palm}, elapsed=${Math.round(now - touch.at)}ms, still=${isStill}`,
+      );
+      if (isStill) n += 1;
     }
+    /*console.log(
+      `[stillCount] n=${n}, touches.size=${touches.size}, details=[${details.join(" | ")}]`,
+    );*/
     return n;
   }
 
@@ -77,9 +98,24 @@ const Recognition = (() => {
 
   function setState(next) {
     if (next === state) return;
+
+    // IDLE → ARMED 전환 시 펜 슬롯 확정 (손가락 개수로 판정)
+    if (state === "IDLE" && next === "ARMED" && mode === "count") {
+      const nFingers = touches.size;
+      console.log(`[setState] nFingers=${nFingers}`);
+      if (nFingers >= 1 && nFingers <= config.maxFingers) {
+        Pen.setSlot(nFingers, "gesture"); // 손가락 개수로 펜 선택
+      }
+    }
+
     state = next;
     document.body.dataset.recState = state;
-    Logger.log("rec_state", { source: "gesture", rec_state: state, slot: Pen.slot, size: Pen.size });
+    Logger.log("rec_state", {
+      source: "gesture",
+      rec_state: state,
+      slot: Pen.slot,
+      size: Pen.size,
+    });
   }
 
   // 손가락 상태가 바뀌거나, 손가락이 "정지"가 될 시각이 되면 다시 판정한다
@@ -102,18 +138,33 @@ const Recognition = (() => {
   // 제스처로 처리했으면 true. 이 펜 다운에는 잉크를 남기지 않는다.
   function penDown(event) {
     if (mode === "off") return false;
-    const nStill = stillCount(event.timeStamp);
-    if (nStill < 1 || nStill > config.maxFingers) return false;
+    // ARMED 상태에서만 제스처 처리
+    if (state !== "ARMED") return false;
 
-    const slot = mode === "count" ? nStill : Pen.slot;
+    // stillCount() 대신 touches.size 사용: 현재 화면에 닿은 손가락 개수
+    const nFingers = touches.size;
+    console.log(`[penDown] nFingers=${nFingers}`);
+    if (nFingers < 1 || nFingers > config.maxFingers) return false;
+
+    // 펜 슬롯은 ARMED 상태 진입 시 이미 확정됨 (setState 함수 참조)
+    const slot = Pen.slot;
     const sizeAfter = Pen.rememberSize ? Pen.sizes[slot] : Pen.size;
-    Logger.log("activation", {
-      source: "gesture", slot, size: sizeAfter, rec_state: "ARMED",
-      n_touch: touches.size, n_still: nStill,
-    });
-    if (mode === "count") Pen.setSlot(slot, "gesture");
 
-    tuning = { pointerId: event.pointerId, startX: event.clientX, startSize: Pen.size };
+    Logger.log("activation", {
+      source: "gesture",
+      slot,
+      size: sizeAfter,
+      rec_state: "ARMED",
+      n_touch: touches.size,
+      n_still: nFingers,
+    });
+
+    // 드래그 준비 (굵기 조절 시작)
+    tuning = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startSize: Pen.size,
+    };
     refresh();
     showTuneSlider(event.clientX, event.clientY, Pen.size);
     return true;
@@ -121,7 +172,10 @@ const Recognition = (() => {
 
   function penMove(event) {
     if (!tuning || event.pointerId !== tuning.pointerId) return;
-    const samples = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+    const samples =
+      typeof event.getCoalescedEvents === "function"
+        ? event.getCoalescedEvents()
+        : [];
     const last = samples.length ? samples[samples.length - 1] : event;
     const size = Size.fromDrag(tuning.startSize, last.clientX - tuning.startX);
     if (Pen.setSize(size, "gesture")) updateTuneSlider(size);
@@ -129,7 +183,11 @@ const Recognition = (() => {
 
   function penUp(event) {
     if (!tuning || event.pointerId !== tuning.pointerId) return;
-    Logger.log("gesture_commit", { source: "gesture", slot: Pen.slot, size: Pen.size });
+    Logger.log("gesture_commit", {
+      source: "gesture",
+      slot: Pen.slot,
+      size: Pen.size,
+    });
     tuning = null;
     hideTuneSlider();
     refresh();
@@ -142,20 +200,34 @@ const Recognition = (() => {
     refresh();
   }
 
-  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+  for (const type of [
+    "pointerdown",
+    "pointermove",
+    "pointerup",
+    "pointercancel",
+  ]) {
     window.addEventListener(type, onTouch, { capture: true, passive: true });
   }
 
   // URL로 임계값 바꾸기 (파일럿용): ?still_px=15&still_ms=150&palm_px=40
   const params = new URLSearchParams(location.search);
-  for (const [key, name] of [["still_px", "stillPx"], ["still_ms", "stillMs"], ["palm_px", "palmPx"]]) {
-    if (params.has(key) && Number.isFinite(Number(params.get(key)))) config[name] = Number(params.get(key));
+  for (const [key, name] of [
+    ["still_px", "stillPx"],
+    ["still_ms", "stillMs"],
+    ["palm_px", "palmPx"],
+  ]) {
+    if (params.has(key) && Number.isFinite(Number(params.get(key))))
+      config[name] = Number(params.get(key));
   }
   Logger.configure({
     stillPx: config.stillPx,
     stillMs: config.stillMs,
     touchCounter: counts,
-    blockDetail: { palm_px: config.palmPx, snap_px: Size.SNAP_PX, track_px: Size.TRACK_PX },
+    blockDetail: {
+      palm_px: config.palmPx,
+      snap_px: Size.SNAP_PX,
+      track_px: Size.TRACK_PX,
+    },
   });
 
   return {
@@ -165,7 +237,11 @@ const Recognition = (() => {
     penMove,
     penUp,
     counts,
-    get mode() { return mode; },
-    get state() { return state; },
+    get mode() {
+      return mode;
+    },
+    get state() {
+      return state;
+    },
   };
 })();
