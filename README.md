@@ -34,7 +34,7 @@
 
 ### 분석
 분석 방법은 [분석 계획](docs/analysis-plan.md)(PR #12, 검토 중), 로그 형식은 [docs/log-schema.md](docs/log-schema.md)를 봅니다.
-분석 코드는 아직 v1.1(단계별 지시, copy 단계) 기준이며, 제시문형 과제에 맞춰 고칠 예정입니다.
+분석 코드는 로그 형식 v1.2(제시문형 과제) 기준입니다 (11/26).
 
 Python 3.12 기준이며, 패키지 버전은 `analysis/requirements.txt`에 고정되어 있습니다. 저장소 루트에서 실행합니다.
 ```powershell
@@ -45,11 +45,21 @@ cd analysis
 ..\.venv\Scripts\python analyze.py ..\data\sample
 ```
 
+**본실험 세션이 끝날 때마다** (다운로드 폴더 → `data/raw`, 참가자 데이터라 커밋되지 않음):
+```powershell
+cd analysis
+..\.venv\Scripts\python collect.py "$env:USERPROFILE\Downloads"   # 파일 정리 + 세션당 35개인지 확인
+..\.venv\Scripts\python validate_log.py ..\data\raw                # 오류 0건인지 확인
+..\.venv\Scripts\python analyze.py ..\data\raw                     # 결과 표는 analysis\output\
+```
+
 | 파일 | 용도 |
 |---|---|
-| `validate_log.py` | 세션 직후 로그 점검 (누락, 순서 오류 등) |
-| `build_steps.py` | 원시 이벤트로 단계별 분석 표 생성 |
-| `analyze.py` | 로그 점검 후 기술통계 출력 |
+| `collect.py` | 브라우저가 내려받은 파일을 `data/raw` 구조로 정리 (중복 사본 처리, 빠진 블록 확인) |
+| `validate_log.py` | 세션 직후 로그 점검 (누락, 순서 오류, 세션 중 코드 버전 변경, 배정표와 다른 순서 등) |
+| `build_steps.py` | 원시 이벤트로 단계별 분석 표 생성 (측정값 정의는 분석 계획 4장) |
+| `stats.py` | 가설 검정 H1~H5 (분석 계획 5·6장) |
+| `analyze.py` | 점검 → 단계 표 → 제외 규칙 → H1~H5 → 표를 `analysis/output/`에 저장 |
 | `replay_thresholds.py` | 정지 임계값과 손→펜 간격을 바꿔 재계산 (`--still 12 120 --window 500 1000`) |
 | `make_sample_data.py` | 테스트용 가짜 데이터 생성 |
 
@@ -73,4 +83,4 @@ cd analysis
 | Prototype | 11/17–20 | 실험 흐름(PR #9), 제시문형 과제(PR #10), 수정(PR #11 검토 중) |
 | Pilot | 11/20–21 | 11/20 1차, 11/21 수정 후 2차. 임계값·제시문·분석 기준 확정 |
 | Half Report | 11/22 (일) | 파일럿 결과 포함 |
-| Main Study | 12월 초 | 본실험 12명. 12월 둘째 주(기말)에는 분석 |
+| Main Study | 11/30 (월) | 본실험 12명 (11/26 팀 결정: 주말에서 월요일로). 이어서 분석 |

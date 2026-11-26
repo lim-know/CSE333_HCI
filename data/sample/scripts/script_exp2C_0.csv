@@ -1,0 +1,7 @@
+script_id,step_id,exp,step_type,task_type,language,cue_text,target_slot,target_size,on_preset,target_x,target_y,text,time_limit_ms
+exp2C_0,01,exp2,size_only,word,ko,검정 4pt 글씨,1,4,1,,,가짜,
+exp2C_0,02,exp2,size_only,return,ko,본문 검정 1pt,1,1,1,,,가짜,
+exp2C_0,03,exp2,size_only,word,ko,검정 2pt 글씨,1,2,1,,,가짜,
+exp2C_0,04,exp2,size_only,return,ko,본문 검정 1pt,1,1,1,,,가짜,
+exp2C_0,05,exp2,switch_size,underline,ko,빨강 2pt 밑줄,2,2,1,,,가짜,
+exp2C_0,06,exp2,switch_size,highlight,ko,형광펜 8pt 칠하기,3,8,1,,,가짜,

@@ -8,13 +8,13 @@
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | 1.0 | 11/4 | 최초 확정 (PR #1, 노태림 승인) |
-| 1.2 (제안) | 11/20 | 제시문형 과제(PR #10)와 PR #11 반영: 단계 정의, `return` 단계, 완료를 일찍 누르면 `skipped`, 굵기 1~8pt, `build`로 버전 구분, `activation`의 `n_still` 뜻 변경. 11/21에 PR #11 `f140813`과 11/20 파일럿 결과로 갱신. 아래 [v1.2 변경 제안과 PR 의존 관계](#v12-변경-제안과-pr-의존-관계) 참고. **노태림 합의 전** |
+| 1.2 (제안) | 11/20 | 제시문형 과제(PR #10)와 PR #11 반영: 단계 정의, `return` 단계, 완료를 일찍 누르면 `skipped`, 굵기 1~8pt, `build`로 버전 구분, `activation`의 `n_still` 뜻 변경. 11/21에 PR #11 `f140813`과 11/20 파일럿 결과로 갱신. 11/26: 단계별 시간 제한 없앰(팀 결정), 분석 코드 v1.2 구현(`analysis/`), `schema_version` 값은 1.1 유지(아래). 아래 [v1.2 변경 제안과 PR 의존 관계](#v12-변경-제안과-pr-의존-관계) 참고. **노태림 합의 전** |
 | 1.1 | 11/4 | 11/4 설계 결정 반영: 따라쓰기 한국어 고정, 완료 버튼, 단계별 시간 제한(`time_limit_ms`), 펜 다운의 `source`(canvas/ui), 손→펜 간격 기준 기록(`touch_to_pen_ms`), participants의 `english_proficiency` 삭제 |
 
 v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 가지다.
 1. 펜 `pointerdown`/`pointerup`에 `source`를 적는다. 필기 영역이면 `canvas`, 툴바·슬라이더·완료 버튼이면 `ui`.
 2. `block_start` detail에 `touch_to_pen_ms`를 적는다. 상한을 쓰지 않으면 `touch_to_pen_ms=none`.
-3. 스크립트의 `time_limit_ms`가 지나면 `step_end`를 `outcome=timeout`으로 남기고 다음 단계로 간다.
+3. 스크립트의 `time_limit_ms`가 지나면 `step_end`를 `outcome=timeout`으로 남기고 다음 단계로 간다. (v1.2에서 없앰, 위 12번)
 
 ## v1.2 변경 제안과 PR 의존 관계
 
@@ -36,6 +36,8 @@ v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 �
 | 9 | `script_id` | `exp2A` | 제시문마다 `exp2A_0` ~ `exp2A_4` |
 | 10 | `build` | 권장 | **필수, 코드를 고칠 때마다 바꾼다.** 분석은 이 값으로 버전별 규칙을 고른다 |
 | 11 | `activation`의 `n_still` | 정지로 판정된 손가락 수 | **닿아 있는 손가락 수** (PR #11 `0cf62ef`부터). 정지 손가락 수는 펜 `pointerdown` 줄의 `n_still`을 쓴다 (그쪽은 v1.1 그대로) |
+| 12 | 단계별 시간 제한 | `time_limit_ms` 필수, 지나면 `timeout` | **없음** (팀 결정 11/26). `time_limit_ms` 열은 남아도 되고 비어도 된다. 분석은 이 값을 쓰지 않는다 |
+| 13 | `schema_version` 값 | 1.1 | **1.1 그대로** 둔다. 열 구성이 같아서 `logger.js`를 고치지 않는다. 규칙 차이는 `build`로 구분한다. 분석은 1.1과 1.2를 모두 받는다 |
 
 저장 규칙(블록마다 파일 저장, 단계표 `script_*.csv` 저장)은 **v1.1 그대로 유지**한다. `exp-2026-11-21`부터 블록이 끝날 때마다 `events`, 조건이 끝날 때 본과제 `script` 5개, 세션이 끝날 때 `session`·`participant`를 내려받는다 (세션당 35개, [장비 체크리스트](device-setup.md)).
 브라우저 백업(localStorage)은 한도가 약 5MB라 블록 3~4개만 남는다 (11/20 파일럿). **대비책으로 믿지 않는다.**
@@ -64,7 +66,8 @@ v1.2의 일부는 PR #11(리뷰 중)에 기대고 있다. **PR이 머지되지 �
 | `build` 값 | 코드 | 적용 |
 |---|---|---|
 | `exp-2026-11-18` | PR #10 (prototype 6b56854), PR #11 (7e8c4bb, 0cf62ef) **모두** | 이 값만으로는 구분이 안 된다. 11/20 파일럿은 시각으로 구분한다: 11:04 전 세션은 `7e8c4bb`, 뒤는 `0cf62ef` |
-| `exp-2026-11-21` | PR #11 `f140813` (블록마다 다운로드, script 저장, 완료 시 `skipped`) | v1.2 |
+| `exp-2026-11-21` | PR #11 `f140813` (블록마다 다운로드, script 저장, 완료 시 `skipped`) | v1.2. 60초 제한 있음 |
+| (다음 값) | 11/26 최종 수정 (시간 제한 없앰 등), main 병합 | v1.2. 본실험용. 값이 정해지면 이 표와 `analysis/logdata.py`의 `KNOWN_BUILDS`에 넣는다 (안 넣으면 `validate_log.py`가 주의를 띄운다) |
 
 ## 원칙
 
@@ -80,9 +83,9 @@ v1.2의 일부는 PR #11(리뷰 중)에 기대고 있다. **PR이 머지되지 �
 | 파일 | 작성 주체 | 내용 |
 |---|---|---|
 | `events/events_<session_id>_b<블록 2자리>.csv` | 프로토타입 | 원시 이벤트. 블록이 끝날 때마다 저장 |
-| `scripts/script_<script_id>.csv` | 실험 설계 | 단계별 지시와 목표값 |
-| `sessions.csv` | 실험 진행자 | 세션별 조건 순서, 장비, 특이사항 |
-| `participants.csv` | 실험 진행자 | 참가자 정보 (이름 X) |
+| `scripts/script_<script_id>.csv` | 프로토타입 (`passage.js`) | 단계별 지시와 목표값. 조건이 끝날 때 본과제 제시문 5개를 저장. **연습 제시문은 저장하지 않는다** (연습은 분석 안 함) |
+| `sessions.csv` | 프로토타입 + 진행자 | 세션별 조건 순서, 장비, 특이사항. 브라우저가 `session_<id>.csv` 한 줄을 내려받고, `analysis/collect.py`가 합친다. 진행자는 `notes`에 커밋·특이사항을 적는다 |
+| `participants.csv` | 프로토타입 | 참가자 정보 (이름 X). `participant_<id>.csv`를 `collect.py`가 합친다 |
 | `questionnaire.csv` | 실험 진행자 | 조건별 NASA-TLX, 선호도 |
 | `steps.csv` | `build_steps.py` | 단계별 분석 표. 직접 고치지 않고 언제든 다시 생성 |
 
@@ -130,7 +133,7 @@ v1.2의 일부는 PR #11(리뷰 중)에 기대고 있다. **PR이 머지되지 �
 `step_end`의 outcome은 아래처럼 정한다.
 - **completed:** v1.2: 목표 상태로 그은 획이 끝났다 (마지막 단계는 그 뒤 완료 버튼). v1.1: 참가자가 완료 버튼을 눌렀다. 버튼을 누른 펜 탭은 `source=ui`인 pointerdown/up으로 남고, 그 직후에 `step_end`를 남긴다.
 - **완료를 일찍 누른 경우 (v1.2):** 새 값을 만들지 않는다. 진행 중 단계는 `skipped`, 남은 단계는 `step_end` 없음. 구분법은 위 v1.2 표 4번.
-- **timeout:** 스크립트의 `time_limit_ms`가 지났다. 참가자에게 제한 시간은 보이지 않는다. 인식이 계속 실패해 단계에 갇히는 것을 막는 안전장치다.
+- **timeout:** 스크립트의 `time_limit_ms`가 지났다. 참가자에게 제한 시간은 보이지 않는다. 인식이 계속 실패해 단계에 갇히는 것을 막는 안전장치였다. **v1.2(11/26)에서 없앰.** 그 전 build 로그에만 나온다.
 - **skipped:** 진행자가 건너뛰었다 (장비 문제 등). 이유는 `sessions.csv`의 `notes`에 적는다.
 | toolbar_tap | 툴바 펜 선택 | source, slot, size |
 | slider_start / slider_end | 슬라이더 조작 시작·끝 | source, slot, size |
@@ -201,7 +204,7 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 | on_preset | 1 | 목표 굵기가 프리셋이면 1, 사이값이면 0 |
 | target_x, target_y | 400, 300 | 다음 획의 목표 위치 |
 | text | 실험 설계 | 쓸 내용 |
-| time_limit_ms | 20000 | 안전용 시간 제한 (ms). **모든 단계에 필수.** 제시문 길이에 따라 단계마다 다르게 정할 수 있다 |
+| time_limit_ms | 60000 | 안전용 시간 제한 (ms). v1.1은 필수. **v1.2(11/26)에서 없앰** — 열은 비어도 된다 |
 
 ## sessions, participants, questionnaire
 
@@ -209,22 +212,24 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 - **participants.csv:** participant, handedness, native_language(ko만 허용), note_language(평소 필기 습관 ko/en/mixed, 기술통계용), tablet_note_months
 - **questionnaire.csv:** participant, condition, item(`tlx_mental`, `preference_rank` 등), value
 
-## steps: 분석 표 (자동 생성)
+## steps: 분석 표 (자동 생성, v1.2)
+
+`build_steps.py`가 만든다. 한 줄 = 단계 하나. 단계표에 있는데 지시가 안 나온 단계도 `outcome=not_reached`로 남는다. 정의는 [분석 계획](analysis-plan.md) 4장.
 
 | 묶음 | 컬럼 |
 |---|---|
-| 식별 | session_id, participant, block, condition, order_index, phase, exp, script_id, step_id |
-| 과제 | step_type, task_type, language, target_slot, target_size, on_preset, time_limit_ms |
-| 시작 상태 | start_slot, start_size |
-| 결과 | outcome, first_slot, first_size, final_slot, final_size |
-| 시각 | t_cue, t_prev_ink_end, t_first_action, t_last_action, t_first_ink, t_first_correct, t_end |
-| 시간 | time_cue_to_correct, time_prev_ink_to_correct, time_reaction, time_manipulate, time_acquire, duration |
-| 굵기 오차 | first_size_log2_err, final_size_log2_err |
-| 횟수 | n_pen_downs, n_ink, n_toolbar_taps, n_slider_drags, n_gestures, n_activations, n_unintended, n_possible_missed, n_wrong_slot, n_wrong_size, n_pointercancel |
+| 식별 | session_id, participant, block, condition, order_index, phase, exp, script_id, step_id, build |
+| 과제 | step_type, task_type, target_slot, target_size, on_preset |
+| 상태 | prev_slot, prev_size (이전 상태), needs_change (이전 상태가 이미 목표면 False), start_slot, start_size (지시 때 펜 상태) |
+| 결과 | outcome (completed / skipped / timeout / not_reached / missing), skipped_by (participant / experimenter), prev_ink_fallback |
+| 시각 | t_cue, t_prev_ink_end, t_first_action (제스처는 손가락이 닿은 때), t_first_action_event, t_last_action, t_first_attempt, t_first_correct, t_end |
+| 시간 | time_prev_ink_to_correct (주 지표), time_cue_to_correct, time_reaction, time_manipulate, time_acquire, duration |
+| 첫 시도 | first_slot, first_size, first_correct, first_size_log2_err |
+| 횟수 | n_ink, n_body_strokes, n_wrong_slot, n_wrong_size, n_wrong_strokes, n_pen_downs, n_eraser_downs, n_toolbar_taps, n_slider_drags, n_activations, n_gestures, n_gesture_used, n_gesture_reverted, n_gesture_no_change, n_penless_slot_change, n_possible_missed, n_pointercancel |
 
 의도치 않은 발동률의 분모는 `n_pen_downs`(필기 영역 펜 다운 수)다. C3의 트리거가 펜 다운이고, 제시문마다 펜 다운 수가 다르기 때문이다.
 
-`duration`(지시 → 완료 버튼)은 필기 속도와 버튼 누르는 시간까지 포함하므로 보조 지표로만 쓴다.
+`duration`(지시 → 단계 끝)은 본문 필기 시간까지 포함하므로 보조 지표로만 쓴다.
 
 ## 정해진 것 (11/4)
 
@@ -239,9 +244,9 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 코드에는 잠정값이 들어가 있다. 결정되면 `build_steps.py`만 고치고 다시 실행한다.
 
 - [ ] (노태림, 정원준) 손→펜 간격 규칙. 손가락이 닿은 뒤 몇 ms 안에 펜이 와야 제스처로 볼지 (`touch_to_pen_ms`). 내부 테스트 로그를 `replay_thresholds.py --window`로 다시 계산해 전환 단계는 살리고 따라쓰기 단계는 걸러지는 값을 고른다. DualKey, Consecutive Distant Taps 논문 참고
-- [ ] (최유진) 단계별 `time_limit_ms` 값
+- [x] (전원) 단계별 시간 제한: 없앤다 (11/26)
 - [ ] (최유진, 강민진) 슬롯별 굵기 기억 여부. `switch_only`의 굵기 평가 방식에 영향
-- [x] (전원) 주 지표: `time_prev_ink_to_correct`(제안서 정의). 11/18 제시문형 결정으로 지시 시점보다 "이전 필기 획 끝"이 자연스러워졌다. v1.2에서 `t_prev_ink_end`는 첫 조작 직전에 끝난 필기 획으로 바꾼다 ([분석 계획](analysis-plan.md) 4.1)
+- [x] (전원) 주 지표: `time_prev_ink_to_correct`(제안서 정의). 11/18 제시문형 결정으로 지시 시점보다 "이전 필기 획 끝"이 자연스러워졌다. v1.2에서 `t_prev_ink_end`는 목표 상태 첫 획 앞에서 **이전 상태로 그은 마지막 획**으로 바꾼다 ([분석 계획](analysis-plan.md) 4.1, 11/26 구체화)
 - [ ] (파일럿 후) 굵기 정답 허용 범위. 잠정값: 목표의 1.10배 이내 (`SIZE_TOL_RATIO`)
 - [ ] (파일럿 후) 의도치 않은 발동의 정의. v1.1 잠정값(copy 구간의 모든 `activation`)은 copy 단계가 없어져 못 쓴다. 후보는 [분석 계획](analysis-plan.md) 4.3
 - [ ] (파일럿 후) 인식 실패 후보의 정의. 잠정값: 전환 단계에서 손가락이 닿았지만 `n_still = 0`인 펜 다운
