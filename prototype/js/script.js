@@ -21,7 +21,7 @@ const PENS = {
   2: { name: "빨간 펜", color: "#e65060", alpha: 1 },
   3: { name: "노란 형광펜", color: "#f1bb3c", alpha: 0.45 },
 };
-const DEFAULT_SIZES = { 1: 1, 2: 1, 3: 4 };   // 블록 시작 때 굵기 (pt)
+const DEFAULT_SIZES = { 1: 1, 2: 1, 3: 4 }; // 블록 시작 때 굵기 (pt, 범위: 1~8)
 
 // ---------- 펜 상태 ----------
 // rememberSize: 슬롯마다 굵기를 따로 기억할지 (log-schema "합의할 것". 기본은 기억)
@@ -68,10 +68,10 @@ const Pen = {
 
 // ---------- 앱 설정 (task.js 가 바꿈) ----------
 const Ink = {
-  locked: false,        // true면 필기 안 됨 (안내 화면 등)
-  allowEraser: true,    // 실험 모드에서는 끔
-  allowMouse: false,    // 펜 없이 테스트할 때만 (?mouse=1)
-  onStroke: null,       // 획이 하나 끝날 때 부를 함수 (선택)
+  locked: false, // true면 필기 안 됨 (안내 화면 등)
+  allowEraser: true, // 실험 모드에서는 끔
+  allowMouse: false, // 펜 없이 테스트할 때만 (?mouse=1)
+  onStroke: null, // 획이 하나 끝날 때 부를 함수 (선택)
   clear() {
     strokes = [];
     redoStack = [];
@@ -81,7 +81,7 @@ const Ink = {
 Ink.allowMouse = new URLSearchParams(location.search).get("mouse") === "1";
 
 let activePointer = null;
-let activeMode = null;   // "ink" | "erase" | "gesture"
+let activeMode = null; // "ink" | "erase" | "gesture"
 let last = null;
 let strokes = [];
 let redoStack = [];
@@ -89,7 +89,10 @@ let currentStroke = null;
 let renderQueued = false;
 
 function isPen(event) {
-  return event.pointerType === "pen" || (Ink.allowMouse && event.pointerType === "mouse");
+  return (
+    event.pointerType === "pen" ||
+    (Ink.allowMouse && event.pointerType === "mouse")
+  );
 }
 function point(event) {
   const rect = canvas.getBoundingClientRect();
@@ -218,7 +221,11 @@ function startStroke(p) {
 }
 function endStroke() {
   if (!currentStroke) return;
-  Logger.log("ink_end", { source: "pen", slot: currentStroke.slot, size: currentStroke.size });
+  Logger.log("ink_end", {
+    source: "pen",
+    slot: currentStroke.slot,
+    size: currentStroke.size,
+  });
   const finished = currentStroke;
   currentStroke = null;
   if (typeof Ink.onStroke === "function") Ink.onStroke(finished);
@@ -305,7 +312,11 @@ tools.forEach((button) =>
     if (!Conditions.toolbarPens) return;
     const slot = Number(button.dataset.slot);
     Pen.setSlot(slot, "toolbar");
-    Logger.log("toolbar_tap", { source: "toolbar", slot: Pen.slot, size: Pen.size });
+    Logger.log("toolbar_tap", {
+      source: "toolbar",
+      slot: Pen.slot,
+      size: Pen.size,
+    });
   }),
 );
 undoButton.addEventListener("click", () => {
@@ -360,7 +371,7 @@ function showTuneSlider(x, y, size) {
   const left = x - Size.toRatio(size) * Size.TRACK_PX;
   tuneSlider.style.width = `${Size.TRACK_PX}px`;
   tuneSlider.style.left = `${left}px`;
-  tuneSlider.style.top = `${y - 72}px`;
+  tuneSlider.style.top = `${y - 30}px`;
   tuneSlider.style.display = "block";
   updateTuneSlider(size);
 }
@@ -368,7 +379,8 @@ function showTuneSlider(x, y, size) {
 function updateTuneSlider(size) {
   const thumbX = Size.toRatio(size) * Size.TRACK_PX;
   tuneThumb.style.left = `${thumbX}px`;
-  tuneThumb.style.width = tuneThumb.style.height = `${Math.max(8, Size.toPx(size) + 4)}px`;
+  tuneThumb.style.width =
+    tuneThumb.style.height = `${Math.max(8, Size.toPx(size) + 4)}px`;
   tuneThumb.style.background = Pen.color;
   tuneThumb.style.opacity = Math.max(Pen.alpha, 0.7);
   tuneValue.style.left = `${thumbX}px`;

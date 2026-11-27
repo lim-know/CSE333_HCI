@@ -296,8 +296,9 @@ button.secondary {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .tune-tick,
@@ -385,7 +386,7 @@ body.study .floating-toolbar {
 /* 제시문 패널: 툴바 아래 가운데. 위에서는 필기 안 됨 */
 #passage {
   position: absolute;
-  top: 92px;
+  top: 110px;
   left: 50%;
   transform: translateX(-50%);
   width: min(1100px, calc(100% - 48px));
@@ -397,6 +398,7 @@ body.study .floating-toolbar {
   border-radius: 12px;
   box-shadow: 0 2px 8px #0000000f;
   font-size: 24px;
+  font-weight: 500;
   line-height: 2.3;
   color: #263044;
   word-break: keep-all;
@@ -463,20 +465,23 @@ body.study .floating-toolbar {
 .write-area {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: 40px;
   transform: translateX(-50%);
   width: min(1100px, calc(100% - 48px));
   border: 2px dashed #b4bccd;
   border-radius: 10px;
-  background: repeating-linear-gradient(to bottom, transparent 0 71px, #e3e6ee 71px 72px);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 71px,
+    #e3e6ee 71px 72px
+  );
 }
 
 /* 알림 (다른 펜·굵기로 썼을 때, 표시가 남았는데 완료를 눌렀을 때) */
 #toast {
   position: absolute;
   left: 50%;
-  bottom: 32px;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 5;
   padding: 10px 18px;
   font-size: 18px;
@@ -501,7 +506,7 @@ body.study .floating-toolbar {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: #f6f7fbf2;
+  background: #f6f7fb;
 }
 .screen-card {
   width: min(640px, 100%);
