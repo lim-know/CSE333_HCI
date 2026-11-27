@@ -1,3 +1,5 @@
 session_id,participant,condition_order,script_variant,date,device,browser,windows,screen_w,screen_h,dpr,experimenter,notes
-P00-1,P00,C1-C2-C3,A,2000-01-01,FAKE,FAKE,FAKE,2560,1600,1.5,FAKE,가짜 데이터
-P01-1,P01,C3-C1-C2,B,2000-01-01,FAKE,FAKE,FAKE,2560,1600,1.5,FAKE,가짜 데이터
+P01-1,P01,C1-C2-C3,A-B-C,2000-01-01,FAKE,FAKE,FAKE,2880,1800,2,FAKE,가짜 데이터
+P02-1,P02,C1-C2-C3,A-B-C,2000-01-01,FAKE,FAKE,FAKE,2880,1800,2,FAKE,가짜 데이터
+P03-1,P03,C1-C3-C2,A-B-C,2000-01-01,FAKE,FAKE,FAKE,2880,1800,2,FAKE,가짜 데이터
+P04-1,P04,C1-C3-C2,A-B-C,2000-01-01,FAKE,FAKE,FAKE,2880,1800,2,FAKE,가짜 데이터

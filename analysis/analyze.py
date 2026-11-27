@@ -1,91 +1,103 @@
-"""Count & Tune 로그 분석 (담당: 정원준)
+"""Count & Tune 로그 분석 (담당: 정원준). 로그 형식 v1.2, 분석 계획 docs/analysis-plan.md.
 
 사용법:
-    python analyze.py <데이터 폴더>
+    python analyze.py <데이터 폴더> [출력 폴더, 기본값 analysis/output]
 
-로그를 먼저 점검하고, 오류가 있으면 분석하지 않는다.
-현재는 파일럿용 기술통계만 낸다. 로그 형식은 docs/log-schema.md 참고.
-- 본실험 계획: RM-ANOVA (전환 시간), Friedman (NASA-TLX), TOST (H2 동등성, H3 비열등성)
-- 주 지표 제안: 지시 -> 첫 정답 획 시간(time_cue_to_correct), 단계 전체 시간(duration)은 보조
+순서:
+1. 로그 점검 (validate_log). 오류가 있으면 분석하지 않는다.
+2. 단계 표 만들기 (build_steps) → 제외·이상치 표시 (stats.prepare)
+3. 6장 참가자 제외 규칙 확인: 해당자가 있으면 알리고 그 참가자를 빼고 분석한다 (보충 모집 대상)
+4. H1~H5 검정과 보조 분석을 화면에 출력하고, 표를 출력 폴더에 CSV로 저장한다
+
+출력 폴더에는 참가자별 값이 들어가므로 커밋하지 않는다 (analysis/output/ 은 .gitignore 에 있다).
 """
 from __future__ import annotations
 
 import sys
+import warnings
+from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
+import stats
 from build_steps import build_steps
 from logdata import load_dataset
 from validate_log import validate
 
 
-def switching_summary(steps: pd.DataFrame) -> pd.DataFrame:
-    """exp를 섞지 않고, 끝내 맞추지 못한 단계도 분모에 남겨 요약한다."""
-    switching = steps[(steps["phase"] == "main") & (steps["step_type"] != "copy")]
-    by_participant = (
-        switching.groupby(["exp", "step_type", "condition", "participant"])["time_cue_to_correct"]
-        .median()
-        .groupby(["exp", "step_type", "condition"])
-        .median()
-        .rename("median_ms")
-    )
-    table = switching.groupby(["exp", "step_type", "condition"]).agg(
-        n_steps=("step_id", "size"),
-        n_resolved=("time_cue_to_correct", "count"),
-    )
-    table["n_unresolved"] = table["n_steps"] - table["n_resolved"]
-    return table.join(by_participant)
+def _show(title: str, value) -> None:
+    print(f"\n[{title}]")
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        print(value.round(4).to_string())
+    else:
+        print(value)
 
 
-def activation_summary(steps: pd.DataFrame) -> pd.DataFrame:
-    """따라쓰기 구간의 의도치 않은 발동을 필기 영역 펜 다운 100회당으로 계산한다."""
-    copy = steps[(steps["phase"] == "main") & (steps["step_type"] == "copy")]
-    table = copy.groupby("condition").agg(
-        n_pen_downs=("n_pen_downs", "sum"),
-        n_unintended=("n_unintended", "sum"),
-    )
-    table["per_100_pen_downs"] = 100 * table["n_unintended"] / table["n_pen_downs"].replace(0, np.nan)
-    return table
+def _report(name: str, result: dict, out: Path) -> None:
+    """가설 하나의 결과를 출력하고, 표마다 <가설>_<항목>.csv 로 저장한다."""
+    print(f"\n========== {name} ==========")
+    for key, value in result.items():
+        if isinstance(value, dict):
+            _report(f"{name} {key}", value, out)
+            continue
+        if isinstance(value, list):
+            if value:
+                print(f"\n[{key}] 세 조건 중 빈 칸이 있어 빠진 참가자: {value}")
+            continue
+        _show(key, value)
+        if isinstance(value, (pd.DataFrame, pd.Series)):
+            value.to_csv(out / f"{name.replace(' ', '_')}_{key}.csv")
 
 
-def size_error_summary(steps: pd.DataFrame) -> pd.DataFrame:
-    """굵기 오차를 log2 비율로 요약한다. 값 0이면 목표와 같다."""
-    sized = steps[(steps["phase"] == "main") & steps["target_size"].notna()].copy()
-    sized["abs_log2_err"] = sized["final_size_log2_err"].abs()
-    return (
-        sized.groupby(["exp", "condition", "participant"])["abs_log2_err"]
-        .mean()
-        .groupby(["exp", "condition"])
-        .mean()
-        .rename("mean_abs_log2_err")
-        .to_frame()
-    )
-
-
-def main(root: str) -> int:
+def main(root: str, out_dir: str | None = None) -> int:
+    out = Path(out_dir) if out_dir else Path(__file__).resolve().parent / "output"
+    out.mkdir(parents=True, exist_ok=True)
     data = load_dataset(root)
     errors, warnings = validate(data)
-    print(f"로그 점검: 오류 {len(errors)}건, 주의 {len(warnings)}건")
+    print(f"로그 점검: 오류 {len(errors)}건, 주의 {len(warnings)}건 (자세한 내용: python validate_log.py {root})")
     for message in errors:
         print(f"[오류] {message}")
     if errors:
         return 1
 
     steps = build_steps(data.events, data.scripts, data.sessions)
-    main_steps = steps[steps["phase"] == "main"]
-    print(f"참가자 {steps['participant'].nunique()}명, 전체 {len(steps)}단계, 본 시행 {len(main_steps)}단계")
-    with pd.option_context("display.width", 120, "display.max_columns", None):
-        print("\n[전환 시간: 지시 -> 첫 정답 획, 참가자별 중앙값의 중앙값]")
-        print(switching_summary(steps).round(1))
-        print("\n[의도치 않은 발동: 따라쓰기 구간]")
-        print(activation_summary(steps).round(2))
-        print("\n[굵기 오차: |log2(실제/목표)|]")
-        print(size_error_summary(steps).round(3))
+    steps.to_csv(out / "steps.csv", index=False)
+    prepared = stats.prepare(steps)
+    print(f"참가자 {prepared['participant'].nunique()}명, 본과제 {len(prepared)}단계 "
+          f"(build: {sorted(map(str, prepared['build'].dropna().unique()))})")
+
+    exclusions = stats.exclusion_table(prepared)
+    _show("6장 제외 단계 (조건별)", exclusions)
+    exclusions.to_csv(out / "exclusions.csv")
+    drop = stats.participants_to_drop(prepared)
+    if len(drop):
+        _show("6장 규칙: 한 조건에서 25% 넘게 빠진 참가자 → 분석에서 빼고 같은 순서로 보충 모집", drop)
+        drop.to_csv(out / "participants_dropped.csv", index=False)
+        prepared = prepared[~prepared["participant"].isin(drop["participant"])]
+
+    _report("H1", stats.h1(prepared), out)
+    _report("H2", stats.h2(prepared), out)
+    # 6장 민감도: 앞선 본문 획이 없는 단계(블록 맨 앞 표시)를 빼도 결론이 같은지
+    _report("민감도_H1", stats.h1(stats.without_fallback(prepared)), out)
+    _report("민감도_H2", stats.h2(stats.without_fallback(prepared)), out)
+    _report("H3", stats.h3(prepared), out)
+    _report("H4", stats.h4(prepared), out)
+    h5 = stats.h5(data.questionnaire[~data.questionnaire["participant"].isin(drop.get("participant", []))])
+    if h5:
+        _report("H5", h5, out)
+    else:
+        print("\n[H5] questionnaire.csv 가 없어 건너뜀")
+
+    _show("보조: 시간 나누기 (중앙값, ms)", stats.components(prepared))
+    _report("보조_순서효과", stats.order_effect(prepared), out)
+    print(f"\n표 저장: {out}")
     return 0
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("사용법: python analyze.py <데이터 폴더>")
-    sys.exit(main(sys.argv[1]))
+    # 값이 모두 같은 칸(예: 오류 0)에서 scipy·pingouin 이 0으로 나누기 경고를 많이 낸다.
+    # 결과표에는 NaN 으로 남으므로 화면 경고만 끈다.
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    if len(sys.argv) not in (2, 3):
+        sys.exit("사용법: python analyze.py <데이터 폴더> [출력 폴더]")
+    sys.exit(main(sys.argv[1], sys.argv[2] if len(sys.argv) == 3 else None))

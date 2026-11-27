@@ -12,9 +12,13 @@ touch_to_pen_ms 를 주면, 손가락이 닿은 뒤 그 시간 안에 펜이 와
     예: python replay_thresholds.py ../data/sample --still 12 120 --still 20 200 --window 500 1000 2000
 
 출력:
-1. 손→펜 간격 분포: 전환 단계(의도한 제스처)와 따라쓰기 단계(의도하지 않은 접촉)를 나눠 본다.
+1. 손→펜 간격 분포: 전환 구간(의도한 제스처)과 필기 구간(의도하지 않은 접촉)을 나눠 본다.
 2. 기준 조합별로 손가락이 닿은 펜 다운 중 제스처로 인식되는 수.
-   전환 단계에서는 많을수록, 따라쓰기 단계에서는 적을수록 좋다.
+   전환 구간에서는 많을수록, 필기 구간에서는 적을수록 좋다.
+
+v1.2 (제시문형)에는 따라쓰기(copy) 단계가 없어서, 단계 안의 구간으로 나눈다 (build_steps 의 시각):
+- switch : 이전 상태 마지막 획 끝(t_prev_ink_end) 뒤 ~ 목표 상태 첫 획(t_first_correct)까지. 펜 상태를 바꾸는 중
+- writing: 그 밖. 본문이나 표시를 쓰는 중이라 제스처가 인식되면 안 된다
 """
 from __future__ import annotations
 
@@ -24,6 +28,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from build_steps import build_steps
 from logdata import canvas_pen_downs, load_dataset
 
 
@@ -60,6 +65,7 @@ def replay_block(block: pd.DataFrame, still_px: float, still_ms: float,
                 "script_id": row.script_id,
                 "step_id": row.step_id,
                 "seq": row.seq,
+                "t_event": row.t_event,
                 "n_touch": len(touches),
                 "n_still_logged": row.n_still,
                 "n_still_replay": n_still,
@@ -78,15 +84,14 @@ def replay(events: pd.DataFrame, still_px: float, still_ms: float,
     return pd.concat(frames, ignore_index=True)
 
 
-def with_step_kind(result: pd.DataFrame, scripts: pd.DataFrame) -> pd.DataFrame:
-    """펜 다운에 단계 종류를 붙인다: switch(전환 단계), copy(따라쓰기), between(단계 사이)."""
-    types = scripts[["script_id", "step_id", "step_type"]]
-    merged = result.merge(types, on=["script_id", "step_id"], how="left")
-    merged["step_kind"] = np.select(
-        [merged["step_type"] == "copy", merged["step_type"].notna()],
-        ["copy", "switch"],
-        default="between",
-    )
+def with_step_kind(result: pd.DataFrame, steps: pd.DataFrame) -> pd.DataFrame:
+    """펜 다운에 구간을 붙인다: switch(펜 상태를 바꾸는 중), writing(그 밖), no_script(단계표가 없는 연습 블록 등)."""
+    windows = steps[["session_id", "block", "step_id", "t_prev_ink_end", "t_first_correct"]]
+    merged = result.merge(windows, on=["session_id", "block", "step_id"], how="left")
+    end = merged["t_first_correct"].fillna(np.inf)
+    in_switch = (merged["t_event"] > merged["t_prev_ink_end"]) & (merged["t_event"] <= end)
+    merged["step_kind"] = np.select([merged["t_prev_ink_end"].isna(), in_switch],
+                                    ["no_script", "switch"], default="writing")
     return merged
 
 
@@ -96,16 +101,16 @@ def interval_table(result: pd.DataFrame) -> pd.DataFrame:
         percentiles=[0.1, 0.5, 0.9])[["count", "min", "10%", "50%", "90%", "max"]]
 
 
-def threshold_table(events: pd.DataFrame, scripts: pd.DataFrame,
+def threshold_table(events: pd.DataFrame, steps: pd.DataFrame,
                     stills: list[tuple[float, float]], windows: list[float | None]) -> pd.DataFrame:
     rows = []
     for still_px, still_ms in stills:
         for window in windows:
-            result = with_step_kind(replay(events, still_px, still_ms, window), scripts)
+            result = with_step_kind(replay(events, still_px, still_ms, window), steps)
             touched = result[result["n_touch"] >= 1]
             row = {"still_px": still_px, "still_ms": still_ms,
                    "touch_to_pen_ms": "없음" if window is None else f"{window:g}"}
-            for kind in ("switch", "copy"):
+            for kind in ("switch", "writing"):
                 part = touched[touched["step_kind"] == kind]
                 row[f"{kind}_닿음"] = len(part)
                 row[f"{kind}_인식"] = int((part["n_still_replay"] >= 1).sum())
@@ -126,12 +131,13 @@ def main(argv: list[str] | None = None) -> None:
     stills = [tuple(s) for s in args.still] if args.still else [(12.0, 120.0)]
     windows: list[float | None] = [None] + (args.window or [])
 
-    base = with_step_kind(replay(data.events, *stills[0]), data.scripts)
+    steps = build_steps(data.events, data.scripts, data.sessions)
+    base = with_step_kind(replay(data.events, *stills[0]), steps)
     with pd.option_context("display.width", 120, "display.max_columns", None):
         print("[손→펜 간격 (ms): 손가락이 닿아 있던 펜 다운만]")
         print(interval_table(base).round(0))
-        print("\n[기준별 인식 수: switch 는 많을수록, copy 는 적을수록 좋음]")
-        print(threshold_table(data.events, data.scripts, stills, windows).to_string(index=False))
+        print("\n[기준별 인식 수: switch 는 많을수록, writing 은 적을수록 좋음]")
+        print(threshold_table(data.events, steps, stills, windows).to_string(index=False))
 
 
 if __name__ == "__main__":
