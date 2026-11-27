@@ -386,7 +386,7 @@ body.study .floating-toolbar {
 /* 제시문 패널: 툴바 아래 가운데. 위에서는 필기 안 됨 */
 #passage {
   position: absolute;
-  top: 92px;
+  top: 110px;
   left: 50%;
   transform: translateX(-50%);
   width: min(1100px, calc(100% - 48px));
@@ -465,7 +465,7 @@ body.study .floating-toolbar {
 .write-area {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: 40px;
   transform: translateX(-50%);
   width: min(1100px, calc(100% - 48px));
   border: 2px dashed #b4bccd;
@@ -481,8 +481,7 @@ body.study .floating-toolbar {
 #toast {
   position: absolute;
   left: 50%;
-  bottom: 32px;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 5;
   padding: 10px 18px;
   font-size: 18px;

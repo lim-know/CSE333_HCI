@@ -38,7 +38,7 @@ const Task = (() => {
     a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
   const sameState = (stroke, want) =>
     want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
-  const BUILD = "exp-2026-11-21"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
+  const BUILD = "exp-2026-11-28"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
   Logger.configure({ build: BUILD });
 
   const $ = (selector) => document.querySelector(selector);
@@ -168,24 +168,14 @@ const Task = (() => {
       .map((part) => {
         if (part.kind === "text") return escapeHtml(part.text);
         const tag = `${Passage.label(part.slot, part.size)} ${Passage.MARK_LABEL[part.mark]}`;
-        // 굵기에 따라 font-weight 적용 (CSS 범위: 100~900)
-        const fontWeightMap = {
-          0.5: 300,
-          1: 400,
-          2: 500,
-          4: 700,
-          6: 800,
-          8: 900,
-        };
-        const fontWeight = fontWeightMap[part.size] || 400;
         return (
-          `<span class="mark m-${part.mark}" data-no="${part.no}" style="--ink:${markColor(part.slot)}; font-weight:${fontWeight}">` +
+          `<span class="mark m-${part.mark}" data-no="${part.no}" style="--ink:${markColor(part.slot)}">` +
           `<span class="mark-text">${escapeHtml(part.text)}</span><span class="mark-tag">${escapeHtml(tag)}</span></span>`
         );
       })
       .join("");
     passage.hidden = false;
-    const top = passage.offsetTop + passage.offsetHeight + 16;
+    const top = passage.offsetTop + passage.offsetHeight + 100;
     target.innerHTML = `<div class="write-area" style="top:${top}px"></div>`;
   }
 
@@ -197,6 +187,8 @@ const Task = (() => {
 
   let toastTimer = null;
   function showToast(text) {
+    const writeArea = target.querySelector(".write-area");
+    toast.style.top = `${(passage.offsetTop + passage.offsetHeight + writeArea.offsetTop) / 2}px`;
     toast.textContent = text;
     toast.hidden = false;
     clearTimeout(toastTimer);
@@ -210,6 +202,8 @@ const Task = (() => {
   // 마지막 단계는 완료 버튼을 누를 때 step_end (그 뒤 본문 필기도 단계 안에 남도록)
 
   function runBlock(meta, script, title) {
+    console.log("script.parts", script.parts);
+    console.log("script.steps", script.steps);
     return new Promise((resolve) => {
       Pen.reset();
       Ink.clear();
@@ -238,7 +232,7 @@ const Task = (() => {
         let cue = "제시문을 끝까지 옮겨 적고 <strong>완료</strong>를 누르세요";
         if (step && !reached) {
           if (step.task_type === "return")
-            cue = `다음: 본문 <strong>${escapeHtml(Passage.label(step.slot, step.size))}</strong>로 이어 쓰기`;
+            cue = `다음: <strong>${escapeHtml(Passage.label(step.slot, step.size))}</strong> ${step.text}`;
           else {
             markEl(step.mark_no)?.classList.add("current");
             cue = `다음: <strong>${escapeHtml(step.cue_text)}</strong>`;

@@ -4,13 +4,16 @@
 // 제시문 표기법 (scripts-data.js)
 //   본문은 그냥 쓴다. 본문 펜은 BASE (검정 1pt).
 //   표시할 곳은 [펜 굵기 표시|단어]
-//     펜: 검정 / 빨강 / 형광       굵기: pt 숫자 (0.5, 1, 2, 4, 8 처럼 프리셋 권장)
+//     펜: 검정 / 빨강 / 형광       굵기: pt 숫자 (1~8 정수 프리셋 권장)
 //     표시: 밑줄 / 동그라미 / 칠하기 / 글씨
 //   예) 핵심은 [빨강 2 밑줄|작업 기억]이다.
 //
-// 단계 = 펜 상태를 바꿔야 하는 곳. 표시 하나마다 "표시 펜으로 바꾸기" 단계가 생기고,
-// 뒤에 본문이 이어지면 "본문 펜으로 돌아가기" 단계(task_type=return)가 하나 더 생긴다.
-// 단계 유형(switch_only / size_only / switch_size)은 슬롯별로 굵기를 기억한다고 보고 계산한다.
+// 단계 생성 로직:
+//   1. 모든 "글씨" 표시는 먼저 처리 (본문 텍스트 누적 후 한 번에 처리)
+//   2. 나머지 표시(밑줄, 동그라미, 칠하기)는 나중에 처리 (본문 텍스트와 함께 누적)
+//   3. 각 표시마다 "표시 펜으로 바꾸기" 단계 생성
+//   4. 표시 뒤에 본문이 이어지면 "본문 펜으로 돌아가기" 단계(task_type=return) 추가
+// 단계 유형(switch_only / size_only / switch_size / no_change)은 현재 슬롯/굵기와 비교해서 계산한다.
 
 const Passage = (() => {
   "use strict";
@@ -108,59 +111,81 @@ const Passage = (() => {
     const out = [];
     const require = (want, info) => {
       const sameSlot = want.slot === slot;
-      if (sameSlot && sizes[slot] === want.size) {
-        throw new Error(
-          `바꿀 게 없는 단계: ${info.text} (${label(want.slot, want.size)})`,
-        );
+      const sameSize = sizes[want.slot] === want.size;
+
+      let type;
+
+      if (sameSlot && sameSize) {
+        type = "no_change";
+      } else if (sameSlot && !sameSize) {
+        type = "size_only";
+      } else if (!sameSlot && sameSize) {
+        type = "switch_only";
+      } else {
+        type = "switch_size";
       }
-      const type = sameSlot
-        ? "size_only"
-        : sizes[want.slot] === want.size
-          ? "switch_only"
-          : "switch_size";
+
       slot = want.slot;
       sizes[slot] = want.size;
-      out.push({ ...info, slot: want.slot, size: want.size, step_type: type });
+
+      out.push({
+        ...info,
+        slot: want.slot,
+        size: want.size,
+        step_type: type,
+      });
     };
 
     // 단계를 우선순위별로 분류해서 수집
     // 우선: 모든 색상의 "글씨" 단계만
     // 나머지: 밑줄, 동그라미, 칠하기 (모든 색상)
-    const wordSteps = []; // 글씨 단계 (모든 색상)
-    const otherSteps = []; // 밑줄, 동그라미, 칠하기 (모든 색상)
+    const wordSteps = [];
+    const otherSteps = [];
 
-    parts.forEach((part, i) => {
-      if (part.kind !== "mark") return;
-      const stepInfo = {
-        task_type: part.mark,
-        mark_no: part.no,
-        text: part.text,
-      };
+    let textBuffer = "";
 
-      // 글씨 단계인지 확인
-      const isWord = part.mark === "word";
+    // 누적된 본문을 return 단계로 생성
+    function flushText() {
+      const text = textBuffer.trim();
 
-      if (isWord) {
-        wordSteps.push({ part, stepInfo });
-      } else {
-        otherSteps.push({ part, stepInfo });
+      if (text) {
+        wordSteps.push({
+          part: BASE,
+          stepInfo: {
+            task_type: "return",
+            text: text,
+          },
+          isReturn: true,
+        });
       }
 
-      // return 단계도 처리
-      const rest = parts.slice(i + 1);
-      const next = rest.find((p) => p.kind === "mark" || p.text.trim());
+      textBuffer = "";
+    }
 
-      // wordSteps만 return 추가 (줄글/본문으로 돌아가기)
-      // otherSteps는 절대 return 없음 (줄글과 같은 순서에 있을 수 없음)
-      if (isWord && next && next.kind === "text") {
-        const returnInfo = {
-          task_type: "return",
+    parts.forEach((part) => {
+      if (part.kind === "text") {
+        textBuffer += part.text;
+      } else if (part.kind === "mark") {
+        const stepInfo = {
+          task_type: part.mark,
           mark_no: part.no,
-          text: next.text.trim().slice(0, 12),
+          text: part.text,
         };
-        wordSteps.push({ part, stepInfo: returnInfo, isReturn: true });
+
+        if (part.mark === "word") {
+          flushText();
+
+          wordSteps.push({ part, stepInfo });
+        } else {
+          textBuffer += part.text;
+
+          otherSteps.push({ part, stepInfo });
+        }
       }
     });
+
+    // 마지막에 남아 있는 본문 처리
+    flushText();
 
     // 글씨 단계 먼저 처리
     wordSteps.forEach(({ part, stepInfo, isReturn }) => {
