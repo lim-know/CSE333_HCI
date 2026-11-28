@@ -50,6 +50,7 @@ cd analysis
 cd analysis
 ..\.venv\Scripts\python collect.py "$env:USERPROFILE\Downloads"   # 파일 정리 + 세션당 35개인지 확인
 ..\.venv\Scripts\python validate_log.py ..\data\raw                # 오류 0건인지 확인
+..\.venv\Scripts\python form_to_questionnaire.py <폼 응답.csv>    # 설문(구글 폼) → data\raw\questionnaire.csv
 ..\.venv\Scripts\python analyze.py ..\data\raw                     # 결과 표는 analysis\output\
 ```
 
@@ -58,6 +59,7 @@ cd analysis
 | `collect.py` | 브라우저가 내려받은 파일을 `data/raw` 구조로 정리 (중복 사본 처리, 빠진 블록 확인) |
 | `validate_log.py` | 세션 직후 로그 점검 (누락, 순서 오류, 세션 중 코드 버전 변경, 배정표와 다른 순서 등) |
 | `build_steps.py` | 원시 이벤트로 단계별 분석 표 생성 (측정값 정의는 분석 계획 4장) |
+| `form_to_questionnaire.py` | 구글 폼 설문 응답 CSV → `questionnaire.csv` (TLX ×10, 몇 번째 → 조건). 폼은 `tools/questionnaire-form.gs`로 만든다 |
 | `stats.py` | 가설 검정 H1~H5 (분석 계획 5·6장) |
 | `analyze.py` | 점검 → 단계 표 → 제외 규칙 → H1~H5 → 표를 `analysis/output/`에 저장 |
 | `replay_thresholds.py` | 정지 임계값과 손→펜 간격을 바꿔 재계산 (`--still 12 120 --window 500 1000`) |

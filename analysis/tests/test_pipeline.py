@@ -15,6 +15,7 @@ ANALYSIS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ANALYSIS))
 
 import collect  # noqa: E402
+import form_to_questionnaire as form  # noqa: E402
 import make_sample_data  # noqa: E402
 import stats  # noqa: E402
 from build_steps import build_steps  # noqa: E402
@@ -506,6 +507,46 @@ class StatsTest(unittest.TestCase):
         sens = stats.without_fallback(self.prepared)
         self.assertFalse(sens.loc[sens["prev_ink_fallback"], "used_for_time"].any())
         self.assertTrue(self.prepared.loc[self.prepared["prev_ink_fallback"], "used_for_time"].any())
+
+
+class FormTest(unittest.TestCase):
+    """구글 폼 응답 CSV → questionnaire.csv (tools/questionnaire-form.gs 의 문항 제목 기준)."""
+
+    PREF = {"C1": "선호 순위 [툴바 + 슬라이더 (펜은 툴바에서 누르고, 굵기는 슬라이더로)]",
+            "C2": "선호 순위 [툴바 + 손가락 굵기 (펜은 툴바에서 고르고, 굵기는 손가락을 댄 채 펜을 끌어서)]",
+            "C3": "선호 순위 [손가락 개수 + 펜 끌기 (손가락 개수로 펜을 고르고, 그대로 펜을 끌어 굵기까지)]"}
+
+    def _row(self, participant, position, tlx, ranks=None):
+        row = {"타임스탬프": "2026. 11. 30 오후 3:00:00", form.PARTICIPANT_TITLE: participant,
+               form.ORDER_TITLE: list(form.ORDER_CHOICES)[position], "의견 (선택)": ""}
+        row.update({title: str(tlx) for title in form.TLX_TITLES})
+        row.update({col: (f"{ranks[c]}위" if ranks else "") for c, col in self.PREF.items()})
+        return row
+
+    def test_conditions_come_from_the_session_order(self):
+        responses = pd.DataFrame([
+            self._row("p03", 0, 2), self._row("P03", 1, 5),
+            self._row("P03", 2, 7, {"C1": 3, "C2": 2, "C3": 1}),
+            self._row("P00", 0, 9),                                   # 테스트 번호는 뺀다
+        ])
+        out, warns = form.convert(responses, {"P03": ["C2", "C1", "C3"]})   # 배정표(C1-C3-C2)와 다름
+        tlx = out[out["item"] == "tlx_mental"].set_index("condition")["value"]
+        self.assertEqual(tlx.to_dict(), {"C1": 50.0, "C2": 20.0, "C3": 70.0})
+        rank = out[out["item"] == "preference_rank"].set_index("condition")["value"]
+        self.assertEqual(rank.to_dict(), {"C1": 3.0, "C2": 2.0, "C3": 1.0})
+        self.assertEqual(set(out["participant"]), {"P03"})
+        self.assertEqual(warns, [])
+        self.assertIn("tlx", stats.h5(pd.concat([out, out.assign(participant="P04")])))
+
+    def test_falls_back_to_assignment_table_and_warns(self):
+        responses = pd.DataFrame([self._row("P03", 0, 2), self._row("P03", 0, 4),
+                                  self._row("P03", 2, 6, {"C1": 1, "C2": 1, "C3": 3})])
+        out, warns = form.convert(responses, {})
+        tlx = out[out["item"] == "tlx_effort"].set_index("condition")["value"]
+        self.assertEqual(tlx.to_dict(), {"C1": 40.0, "C2": 60.0})          # P03 배정: C1-C3-C2, 나중 응답
+        self.assertTrue(any("두 번" in w for w in warns))
+        self.assertTrue(any("선호 순위가" in w for w in warns))
+        self.assertTrue(any("TLX가 있는 조건" in w for w in warns))
 
 
 class SampleTest(unittest.TestCase):
