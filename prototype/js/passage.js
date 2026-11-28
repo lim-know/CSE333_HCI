@@ -50,7 +50,6 @@ const Passage = (() => {
     "text",
     "time_limit_ms",
   ];
-  const DEFAULT_LIMIT_MS = 60000;
 
   // "[빨강 2 밑줄|작업 기억]" 들을 찾아 본문/표시 조각으로 나눈다
   function segments(markup) {
@@ -222,7 +221,7 @@ const Passage = (() => {
   };
 
   // 로그 분석용 scripts 표 (docs/log-schema.md 와 같은 열)
-  function toCsv(id, list, limitMs = DEFAULT_LIMIT_MS) {
+  function toCsv(id, list) {
     const rows = list.map((s) => ({
       script_id: id,
       step_id: s.step_id,
@@ -237,7 +236,7 @@ const Passage = (() => {
       target_x: "",
       target_y: "",
       text: s.text,
-      time_limit_ms: limitMs,
+      time_limit_ms: "", // 시간 제한 없음 (11/26 팀 결정). 열은 형식 유지용
     }));
     return (
       [

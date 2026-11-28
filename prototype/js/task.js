@@ -3,10 +3,10 @@
 //  - 시작 화면: 참가자 번호 → 조건 순서·제시문 세트를 배정표에서 자동으로 고름 (직접 바꿀 수도 있음)
 //  - 조건마다: 설명 → 연습 블록 → 본과제 블록 → 설문 안내
 //  - 블록 = 제시문 하나 (11/18 팀 결정). 위에 제시문, 아래 칸에 옮겨 적으면서 표시된 곳은 지정한 펜·굵기로 표시
-//  - 단계 = 펜 상태를 바꿔야 하는 곳 (passage.js). 지금 단계의 펜·굵기로 그은 획이 끝나면 다음 단계로
+//  - 단계 = 참가자가 할 일 하나 (passage.js). 지금 단계의 펜·굵기로 그은 획이 끝나면 다음 단계로
 //    → 단계 시작(cue_shown) = 앞 단계의 정답 획이 끝난 때. 전환 시간은 "이전 획 끝 → 정답 획"으로 본다
 //  - 다른 펜·굵기로 쓰면 알림. 표시가 남았는데 완료를 누르면 알림 (넘어가지 않음)
-//  - 참가자에게 안 보이는 단계별 시간 제한(time_limit_ms)이 지나면 timeout 으로 다음 단계
+//  - 단계별 시간 제한 없음 (11/26 팀 결정). 넘어가는 건 정답 획, 완료 버튼, 진행자 건너뛰기뿐
 //  - 블록이 끝날 때마다 로그 CSV 저장. 세션이 끝나면 sessions/participants 한 줄과 사용한 스크립트도 저장
 // 진행자 단축키: Ctrl+Shift+S = 이 단계 건너뛰기(skipped), Ctrl+Shift+Q = 세션 중단
 // 제시문은 scripts-data.js (실험 설계 담당: 최유진)
@@ -38,7 +38,7 @@ const Task = (() => {
     a > 0 && b > 0 && a / b <= SIZE_TOL && b / a <= SIZE_TOL;
   const sameState = (stroke, want) =>
     want && stroke.slot === want.slot && sameSize(stroke.size, want.size);
-  const BUILD = "exp-2026-11-28"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
+  const BUILD = "exp-2026-11-29"; // 코드를 고치면 바꿔 주세요. 로그 block_start 에 남음
   Logger.configure({ build: BUILD });
 
   const $ = (selector) => document.querySelector(selector);
@@ -202,8 +202,6 @@ const Task = (() => {
   // 마지막 단계는 완료 버튼을 누를 때 step_end (그 뒤 본문 필기도 단계 안에 남도록)
 
   function runBlock(meta, script, title) {
-    console.log("script.parts", script.parts);
-    console.log("script.steps", script.steps);
     return new Promise((resolve) => {
       Pen.reset();
       Ink.clear();
@@ -218,7 +216,6 @@ const Task = (() => {
       let index = -1;
       let reached = false; // 지금 단계의 정답 획이 나왔는지 (마지막 단계용)
       let prev = { ...Passage.BASE }; // 바로 앞에 요구된 상태. 이 상태로 쓰는 건 그냥 본문 필기
-      let timer = null;
 
       const markEl = (no) => passage.querySelector(`.mark[data-no="${no}"]`);
       const show = () => {
@@ -250,16 +247,11 @@ const Task = (() => {
         reached = false;
         const step = steps[i];
         Logger.cueShown(step.step_id, { slot: Pen.slot, size: Pen.size });
-        timer = setTimeout(
-          () => finish("timeout"),
-          Number(step.time_limit_ms) || 60000,
-        );
         show();
       };
 
       // 지금 단계를 끝내고 다음 단계로
       const finish = (outcome) => {
-        clearTimeout(timer);
         const step = steps[index];
         if (!step) return;
         Logger.stepEnd(outcome, { slot: Pen.slot, size: Pen.size });
@@ -283,7 +275,6 @@ const Task = (() => {
           markEl(step.mark_no)?.classList.add("done");
         if (index + 1 < steps.length) finish("completed");
         else {
-          clearTimeout(timer);
           reached = true;
           prev = { slot: step.slot, size: step.size };
           show();
@@ -302,7 +293,6 @@ const Task = (() => {
       };
 
       const end = (lastOutcome) => {
-        clearTimeout(timer);
         if (index < steps.length)
           Logger.stepEnd(lastOutcome, { slot: Pen.slot, size: Pen.size });
         Ink.onStroke = null;
