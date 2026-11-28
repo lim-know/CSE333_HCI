@@ -8,7 +8,7 @@
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | 1.0 | 11/4 | 최초 확정 (PR #1, 노태림 승인) |
-| 1.2 (제안) | 11/20 | 제시문형 과제(PR #10)와 PR #11 반영: 단계 정의, `return` 단계, 완료를 일찍 누르면 `skipped`, 굵기 1~8pt, `build`로 버전 구분, `activation`의 `n_still` 뜻 변경. 11/21에 PR #11 `f140813`과 11/20 파일럿 결과로 갱신. 11/26: 단계별 시간 제한 없앰(팀 결정), 분석 코드 v1.2 구현(`analysis/`), `schema_version` 값은 1.1 유지(아래). 아래 [v1.2 변경 제안과 PR 의존 관계](#v12-변경-제안과-pr-의존-관계) 참고. **노태림 합의 전** |
+| 1.2 (제안) | 11/20 | 제시문형 과제(PR #10)와 PR #11 반영: 단계 정의, `return` 단계, 완료를 일찍 누르면 `skipped`, 굵기 1~8pt, `build`로 버전 구분, `activation`의 `n_still` 뜻 변경. 11/21에 PR #11 `f140813`과 11/20 파일럿 결과로 갱신. 11/26: 단계별 시간 제한 없앰(팀 결정), 분석 코드 v1.2 구현(`analysis/`), `schema_version` 값은 1.1 유지(아래). 11/28: PR #11 `515b823` 단계 구성 변경(1번, 5번), build `exp-2026-11-28`. 아래 [v1.2 변경 제안과 PR 의존 관계](#v12-변경-제안과-pr-의존-관계) 참고. **노태림 합의 전** |
 | 1.1 | 11/4 | 11/4 설계 결정 반영: 따라쓰기 한국어 고정, 완료 버튼, 단계별 시간 제한(`time_limit_ms`), 펜 다운의 `source`(canvas/ui), 손→펜 간격 기준 기록(`touch_to_pen_ms`), participants의 `english_proficiency` 삭제 |
 
 v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 가지다.
@@ -25,11 +25,11 @@ v1.0에서 바뀐 부분 중 **구현에 영향이 있는 것**은 아래 세 �
 
 | # | 항목 | v1.1 | v1.2 |
 |---|---|---|---|
-| 1 | 단계 | 지시 하나 = 단계 하나, 완료 버튼으로 끝남 | **펜 상태를 바꿔야 하는 곳 = 단계.** 표시마다 "표시 상태로" 단계, 뒤에 본문이 이어지면 "본문으로 돌아가기" 단계(`task_type=return`) |
+| 1 | 단계 | 지시 하나 = 단계 하나, 완료 버튼으로 끝남 | **참가자가 할 일 하나 = 단계** (`515b823`부터). 본문은 글씨 표시마다 끊겨 "본문 쓰기" 단계(`task_type=return`, `text`에 쓸 본문 전체)가 되고 글씨 표시와 번갈아 나온다. 밑줄·동그라미·칠하기는 그 뒤에 한꺼번에. `f140813`까지는 펜 상태를 바꿔야 하는 곳만 단계였다 (차이는 no_change 단계뿐) |
 | 2 | 단계 진행 | 완료 버튼 | 목표 상태로 그은 획이 끝나면 자동으로 다음 단계. 마지막 단계만 완료 버튼 |
 | 3 | `cue_shown` | 지시가 화면에 그려진 때 | 앞 단계 정답 획이 끝나 다음 표시가 강조된 때. **주 지표의 기준점이 아니다** (분석 계획 4.1) |
 | 4 | `step_end` outcome | completed / timeout / skipped | 값은 그대로. 표시가 남은 채 완료를 누르면 **진행 중 단계는 `skipped`**, 남은 단계는 `step_end`가 없다 (단계표와 비교해 찾는다). 진행자 건너뛰기(`s` 키)와는 다음 이벤트로 구분한다: `skipped` 바로 뒤가 `block_end`면 참가자가 완료를 누른 것, 다음 단계의 `cue_shown`이면 진행자 |
-| 5 | `step_type` | `copy` 있음 | `copy` 없음. switch_only / size_only / switch_size |
+| 5 | `step_type` | `copy` 있음 | `copy` 없음. switch_only / size_only / switch_size / **no_change**(`515b823`부터. 펜 상태가 바로 앞과 같음. 본문으로 시작하는 제시문의 첫 단계. 분석은 시간을 재지 않는다) |
 | 6 | 굵기 | 프리셋 0.5·1·2·4·8pt, 로그 눈금 | 1~8pt, 선형 눈금. **프리셋은 정수 8개**이고 근처(`snap_px`)에 오면 프리셋에 붙는다. 그 사이는 0.1pt 단위 값이 나온다. `on_preset`은 정수면 1 |
 | 7 | C3 슬롯 변경 | 펜 다운(`activation`) 때 | 손가락이 멈춘 순간(IDLE→ARMED) **닿아 있는 손가락 수**로 정하고, 그 뒤에 닿는 손가락은 반영하지 않는다 (팀 결정 11/20). `slot_change`(source=gesture)가 `activation` 없이 생길 수 있다 |
 | 8 | 지우개 | 실험 중 끔 | 실험 중 켬. 새 이벤트 없이 펜 `pointerdown`의 `buttons`(32 또는 2)로 찾는다 |
@@ -67,7 +67,8 @@ v1.2의 일부는 PR #11(리뷰 중)에 기대고 있다. **PR이 머지되지 �
 |---|---|---|
 | `exp-2026-11-18` | PR #10 (prototype 6b56854), PR #11 (7e8c4bb, 0cf62ef) **모두** | 이 값만으로는 구분이 안 된다. 11/20 파일럿은 시각으로 구분한다: 11:04 전 세션은 `7e8c4bb`, 뒤는 `0cf62ef` |
 | `exp-2026-11-21` | PR #11 `f140813` (블록마다 다운로드, script 저장, 완료 시 `skipped`) | v1.2. 60초 제한 있음 |
-| (다음 값) | 11/26 최종 수정 (시간 제한 없앰 등), main 병합 | v1.2. 본실험용. 값이 정해지면 이 표와 `analysis/logdata.py`의 `KNOWN_BUILDS`에 넣는다 (안 넣으면 `validate_log.py`가 주의를 띄운다) |
+| `exp-2026-11-28` | PR #11 `515b823` (단계 = 할 일 단위, `no_change`, UI 위치 조정) | v1.2. **60초 제한이 아직 코드에 있음** (11/28 확인) |
+| (다음 값) | 시간 제한 없앰, main 병합 | v1.2. 본실험용. 값이 정해지면 이 표와 `analysis/logdata.py`의 `KNOWN_BUILDS`에 넣는다 (안 넣으면 `validate_log.py`가 주의를 띄운다) |
 
 ## 원칙
 
@@ -195,7 +196,7 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 |---|---|---|
 | script_id, step_id | exp2C, s03 | 둘을 합쳐 고유해야 함 |
 | exp | exp2 | exp1 / exp2 |
-| step_type | switch_size | switch_only / size_only / switch_size (v1.1의 copy는 v1.2에서 없음) |
+| step_type | switch_size | switch_only / size_only / switch_size / no_change (v1.1의 copy는 v1.2에서 없음) |
 | task_type | circle | underline / highlight / circle / word / return(본문으로 돌아가기, v1.2) |
 | language | ko | 쓰는 언어. 11/4 결정으로 **ko만 허용**. 언어가 없는 과제는 빈칸. copy는 필수 |
 | cue_text | 빨간 펜 2pt | 상단 배너에 보이는 지시 (펜 이름 + 굵기) |
@@ -225,7 +226,7 @@ const pointerSource = (e) => (e.target.closest("#canvas") ? "canvas" : "ui");
 | 시각 | t_cue, t_prev_ink_end, t_first_action (제스처는 손가락이 닿은 때), t_first_action_event, t_last_action, t_first_attempt, t_first_correct, t_end |
 | 시간 | time_prev_ink_to_correct (주 지표), time_cue_to_correct, time_reaction, time_manipulate, time_acquire, duration |
 | 첫 시도 | first_slot, first_size, first_correct, first_size_log2_err |
-| 횟수 | n_ink, n_body_strokes, n_wrong_slot, n_wrong_size, n_wrong_strokes, n_pen_downs, n_eraser_downs, n_toolbar_taps, n_slider_drags, n_activations, n_gestures, n_gesture_used, n_gesture_reverted, n_gesture_no_change, n_penless_slot_change, n_possible_missed, n_pointercancel |
+| 횟수 | n_ink, n_body_strokes, n_wrong_slot, n_wrong_size, n_wrong_strokes, n_pen_downs, n_eraser_downs, n_toolbar_taps, n_slider_drags, n_activations, n_gestures, n_gesture_used, n_gesture_reverted, n_gesture_unchanged, n_penless_slot_change, n_possible_missed, n_pointercancel |
 
 의도치 않은 발동률의 분모는 `n_pen_downs`(필기 영역 펜 다운 수)다. C3의 트리거가 펜 다운이고, 제시문마다 펜 다운 수가 다르기 때문이다.
 

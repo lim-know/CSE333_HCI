@@ -165,7 +165,7 @@ class BuildStepsTest(unittest.TestCase):
         self.assertEqual(row.time_manipulate, 1900 - 1301)
 
     def test_trying_a_gesture_then_writing_more_body_moves_the_start(self):
-        """11/20 파일럿: 블록 시작에 굵기를 안 바꾼 제스처(no_change) → 본문을 더 씀 → 그 뒤 진짜 전환."""
+        """11/20 파일럿: 블록 시작에 굵기를 안 바꾼 제스처(unchanged) → 본문을 더 씀 → 그 뒤 진짜 전환."""
         log = Log(condition="C2")
         log.cue(1000, "01")
         log.gesture(1100, 1300, 1, 1.0, before=(1, 1.0))      # 굵기 그대로
@@ -176,7 +176,7 @@ class BuildStepsTest(unittest.TestCase):
         row = steps_of(log, script(("01", "size_only", "word", 1, 4.0))).iloc[0]
         self.assertEqual(row.t_prev_ink_end, 2051)
         self.assertEqual(row.t_first_action, 2500)
-        self.assertEqual(row.n_gesture_no_change, 1)
+        self.assertEqual(row.n_gesture_unchanged, 1)
         self.assertEqual(row.n_gesture_used, 1)
 
     def test_no_previous_stroke_falls_back_to_the_cue(self):
@@ -308,7 +308,7 @@ class ReplayTest(unittest.TestCase):
         steps = build_steps(data.events, data.scripts, data.sessions)
         table = threshold_table(data.events, steps, [(12, 120)], [None, 1]).set_index("touch_to_pen_ms")
         self.assertGreater(table.loc["없음", "switch_인식"], 0)
-        self.assertEqual(table.loc["없음", "writing_인식"], 1)   # P01 C2 exp2B_0 의 no_change 제스처
+        self.assertEqual(table.loc["없음", "writing_인식"], 1)   # P01 C2 exp2B_0 의 unchanged 제스처
         self.assertEqual(table.loc["1", "switch_인식"], 0)
 
 
@@ -463,6 +463,17 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(drop[["participant", "condition"]].values.tolist(), [["P01", "C1"]])
         self.assertTrue(stats.participants_to_drop(self.prepared).empty)
 
+    def test_drop_rule_ignores_no_change_steps(self):
+        """블록 첫 본문(no_change)은 원래 시간을 안 재므로 25% 분모에 넣지 않는다."""
+        frame = pd.DataFrame({
+            "participant": "P01", "condition": "C1",
+            "step_type": ["no_change", "size_only", "size_only", "switch_size"],
+            "used_for_time": [False, True, True, True],
+        })
+        self.assertTrue(stats.participants_to_drop(frame).empty)   # 분모에 넣으면 25% (경계)
+        frame.loc[1, "used_for_time"] = False
+        self.assertEqual(len(stats.participants_to_drop(frame)), 1)   # 1/3 제외
+
     def test_cells_are_one_value_per_participant_and_condition(self):
         cells = stats.cell_means(self.prepared, "switch_size")
         self.assertFalse(cells.duplicated(["participant", "condition"]).any())
@@ -510,25 +521,31 @@ class SampleTest(unittest.TestCase):
     def test_passage_steps_match_passage_js_rules(self):
         steps = make_sample_data.passage_steps(make_sample_data.PASSAGES[0])
         self.assertEqual([s["task_type"] for s in steps],
-                         ["word", "return", "word", "return", "underline", "highlight"])
+                         ["return", "word", "return", "word", "return", "underline", "highlight"])
         self.assertEqual([s["step_type"] for s in steps],
-                         ["size_only", "size_only", "size_only", "size_only", "switch_size", "switch_size"])
+                         ["no_change", "size_only", "size_only", "size_only", "size_only", "switch_size",
+                          "switch_size"])
+        # 표시로 시작하면 no_change 가 없다 (실제 exp2B_1 과 같은 경우)
+        steps = make_sample_data.passage_steps(make_sample_data.PASSAGES[1])
+        self.assertEqual([s["task_type"] for s in steps], ["word", "return", "circle", "highlight"])
 
     def test_sample_contains_the_intended_edge_cases(self):
         data = load_dataset(SAMPLE)
         steps = build_steps(data.events, data.scripts, data.sessions)
         s = steps.set_index(["participant", "condition", "script_id", "step_id"])
-        self.assertEqual(s.loc[("P01", "C3", "exp2C_0", "02"), "n_wrong_slot"], 1)
-        self.assertFalse(s.loc[("P01", "C3", "exp2C_0", "02"), "first_correct"])
-        self.assertEqual(s.loc[("P01", "C3", "exp2C_0", "04"), "n_possible_missed"], 1)
-        self.assertEqual(s.loc[("P01", "C2", "exp2B_0", "01"), "n_gesture_no_change"], 1)
-        self.assertEqual(s.loc[("P02", "C3", "exp2C_0", "01"), "n_penless_slot_change"], 1)
+        self.assertEqual(s.loc[("P01", "C3", "exp2C_0", "03"), "n_wrong_slot"], 1)
+        self.assertFalse(s.loc[("P01", "C3", "exp2C_0", "03"), "first_correct"])
+        self.assertEqual(s.loc[("P01", "C3", "exp2C_0", "05"), "n_possible_missed"], 1)
+        self.assertEqual(s.loc[("P01", "C2", "exp2B_0", "01"), "n_gesture_unchanged"], 1)
+        self.assertEqual(s.loc[("P02", "C3", "exp2C_0", "02"), "n_penless_slot_change"], 1)
         self.assertEqual(s.loc[("P02", "C1", "exp2A_1", "03"), "skipped_by"], "participant")
         self.assertEqual(s.loc[("P02", "C1", "exp2A_1", "04"), "outcome"], "not_reached")
-        self.assertEqual(s.loc[("P03", "C2", "exp2C_0", "03"), "skipped_by"], "experimenter")
-        self.assertEqual(s.loc[("P03", "C1", "exp2A_0", "01"), "n_eraser_downs"], 1)
+        self.assertEqual(s.loc[("P03", "C2", "exp2C_0", "04"), "skipped_by"], "experimenter")
+        self.assertEqual(s.loc[("P03", "C1", "exp2A_0", "02"), "n_eraser_downs"], 1)
         self.assertEqual(s.loc[("P04", "C2", "exp2C_1", "02"), "n_pointercancel"], 1)
-        fallback = steps[steps["prev_ink_fallback"]]
+        no_change = steps[steps["step_type"] == "no_change"]
+        self.assertTrue((no_change["step_id"] == "01").all() and not no_change["needs_change"].any())
+        fallback = steps[steps["prev_ink_fallback"] & (steps["step_type"] != "no_change")]
         self.assertTrue((fallback["step_id"] == "01").all() and fallback["script_id"].str.endswith("_1").all())
         self.assertTrue(np.isfinite(steps.loc[steps["outcome"] == "completed", "time_prev_ink_to_correct"]).all())
 

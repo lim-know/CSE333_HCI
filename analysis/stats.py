@@ -68,7 +68,8 @@ def exclusion_table(prepared: pd.DataFrame) -> pd.DataFrame:
         "skipped_진행자": (p["outcome"] == "skipped") & (p["skipped_by"] == "experimenter"),
         "timeout": p["outcome"] == "timeout",
         "not_reached": p["outcome"] == "not_reached",
-        "바꿀것없음": (p["outcome"] == "completed") & ~p["needs_change"],
+        "no_change단계": p["step_type"] == "no_change",
+        "바꿀것없음(건너뜀뒤)": (p["outcome"] == "completed") & ~p["needs_change"] & (p["step_type"] != "no_change"),
         "이상치": p["is_outlier"],
         "앞선본문획없음(포함)": p["prev_ink_fallback"] & p["time_ok"],
         "시간분석사용": p["used_for_time"],
@@ -77,8 +78,13 @@ def exclusion_table(prepared: pd.DataFrame) -> pd.DataFrame:
 
 
 def participants_to_drop(prepared: pd.DataFrame) -> pd.DataFrame:
-    """한 조건에서 본과제 단계의 25% 넘게 시간 분석에서 빠진 참가자 (보충 모집 대상)."""
-    share = 1 - prepared.groupby(["participant", "condition"])["used_for_time"].mean()
+    """한 조건에서 본과제 단계의 25% 넘게 시간 분석에서 빠진 참가자 (보충 모집 대상).
+
+    분모는 바꿀 게 있도록 만든 단계다. 블록 첫 본문 같은 no_change 단계는 원래 시간을 재지 않으므로 넣지 않는다
+    (넣으면 제시문마다 1단계씩, 약 20%가 처음부터 '제외'로 잡힌다).
+    """
+    designed = prepared[prepared["step_type"] != "no_change"]
+    share = 1 - designed.groupby(["participant", "condition"])["used_for_time"].mean()
     bad = share[share > MAX_EXCLUDED_SHARE].rename("excluded_share").reset_index()
     return bad
 
@@ -186,7 +192,7 @@ def error_cells(prepared: pd.DataFrame, unintended: list[str] = UNINTENDED_COLUM
     """
     use = prepared[prepared["outcome"] != "not_reached"]
     sums = use.groupby(["participant", "condition"])[
-        ["n_wrong_strokes", "n_pen_downs", "n_gesture_reverted", "n_gesture_no_change",
+        ["n_wrong_strokes", "n_pen_downs", "n_gesture_reverted", "n_gesture_unchanged",
          "n_penless_slot_change"]].sum()
     sums["n_unintended"] = sums[unintended].sum(axis=1)
     sums["errors_per_100"] = 100 * (sums["n_wrong_strokes"] + sums["n_unintended"]) / sums["n_pen_downs"].replace(0, np.nan)
@@ -197,7 +203,7 @@ def h4(prepared: pd.DataFrame) -> dict:
     """H4 모드 오류: C3가 C1보다 많음 (예상되는 비용). Friedman → Wilcoxon (Holm)."""
     cells, dropped = complete_cases(error_cells(prepared), "errors_per_100")
     components = cells.groupby("condition")[
-        ["n_wrong_strokes", "n_gesture_reverted", "n_gesture_no_change", "n_penless_slot_change", "n_pen_downs"]
+        ["n_wrong_strokes", "n_gesture_reverted", "n_gesture_unchanged", "n_penless_slot_change", "n_pen_downs"]
     ].sum().reindex(CONDITION_ORDER)
     return {"desc": descriptives(cells, "errors_per_100"), "components": components, "dropped": dropped,
             **one_way(cells, "errors_per_100", parametric=False)}

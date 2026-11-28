@@ -1,7 +1,7 @@
 """분석 코드 테스트용 가짜 데이터를 만든다. 실제 실험 결과가 아니다. 로그 형식 v1.2 (제시문형 과제).
 
 같은 시드로 항상 같은 파일이 나온다. 로그 형식이나 판정 규칙을 바꾸면 다시 실행한다.
-브라우저(prototype2 f140813)가 남기는 이벤트 순서를 흉내 낸다:
+브라우저(prototype2 515b823, build exp-2026-11-28)가 남기는 이벤트 순서를 흉내 낸다:
 - 툴바: 펜 pointerdown(source=ui) → slot_change(toolbar) → toolbar_tap
 - 슬라이더: 펜 pointerdown(ui) → slider_start → size_change(slider) → slider_end
 - C2·C3 제스처: 손가락 pointerdown → (C3: slot_change(gesture)) → rec_state ARMED → 펜 pointerdown
@@ -14,14 +14,15 @@
 그래서 validate_log 가 "본과제 제시문 2개 (기대 5개)" 주의를 띄우는 것이 정상이다.
 
 일부러 넣은 사례 (tests/test_pipeline.py 가 확인한다):
-- P01 C3 exp2C_0 02: 손가락 수를 틀려(2개) 빨간 펜으로 먼저 쓰고 고침 → 오답 획(펜) 1, 첫 시도 오답
-- P01 C3 exp2C_0 04: 손가락이 움직여 인식 실패 → 본문 상태 획(인식 실패 후보 1) 후 재시도
-- P01 C2 exp2B_0 01: 블록 시작에 굵기를 바꾸지 않은 제스처(no_change) 후 본문을 씀 (11/20 파일럿 사례)
-- P02 C3 exp2C_0 01: 옷자락처럼 손가락이 닿아 슬롯만 바뀜(펜 없음) → 되돌리고 본문을 이어 씀 (penless)
+- P01 C3 exp2C_0 03: 손가락 수를 틀려(2개) 빨간 펜으로 먼저 쓰고 고침 → 오답 획(펜) 1, 첫 시도 오답
+- P01 C3 exp2C_0 05: 손가락이 움직여 인식 실패 → 본문 상태 획(인식 실패 후보 1) 후 재시도
+- P01 C2 exp2B_0 01: 블록 시작(no_change 단계)에 굵기를 바꾸지 않은 제스처(unchanged) 후 본문을 씀 (11/20 파일럿 사례)
+- P02 C3 exp2C_0 02: 옷자락처럼 손가락이 닿아 슬롯만 바뀜(펜 없음) → 되돌리고 본문을 이어 씀 (penless)
 - P02 C1 exp2A_1 03: 표시를 남긴 채 완료를 누름 → 진행 중 단계 skipped(participant), 나머지 not_reached
-- P03 C2 exp2C_0 03: 진행자가 건너뜀(Ctrl+Shift+S) → skipped(experimenter)
-- P03 C1 exp2A_0 01: 펜 옆 버튼으로 지우개 사용
+- P03 C2 exp2C_0 04: 진행자가 건너뜀(Ctrl+Shift+S) → skipped(experimenter)
+- P03 C1 exp2A_0 02: 펜 옆 버튼으로 지우개 사용
 - P04 C2 exp2C_1 02: 터치 pointercancel
+- *_0 제시문은 본문으로 시작해서 01 단계가 no_change(본문, 바꿀 것 없음)다. 시간 분석에서 빠진다
 - 모든 참가자의 *_1 제시문 01 단계: 블록 맨 앞이 표시라 앞선 본문 획이 없음 → prev_ink_fallback
 """
 from __future__ import annotations
@@ -50,41 +51,54 @@ PARTICIPANTS = ["P01", "P02", "P03", "P04"]
 ORDERS = {"P01": ("C1-C2-C3", "A-B-C"), "P02": ("C1-C2-C3", "A-B-C"),
           "P03": ("C1-C3-C2", "A-B-C"), "P04": ("C1-C3-C2", "A-B-C")}
 
-# 제시문: (표시 종류, 슬롯, 굵기, 뒤에 본문이 이어지는지). 세트 A·B·C 는 같은 구조 (실제 제시문과 같은 방식).
-# 0번: 본문으로 시작. 1번: 표시로 시작 (앞선 본문 획이 없는 경우).
+# 제시문: (본문으로 시작하는지, [(표시 종류, 슬롯, 굵기, 뒤에 본문이 이어지는지), ...]).
+# 세트 A·B·C 는 같은 구조 (실제 제시문과 같은 방식). 0번: 본문으로 시작. 1번: 표시로 시작 (앞선 본문 획이 없는 경우).
 PASSAGES = [
-    [("word", 1, 4.0, True), ("underline", 2, 2.0, True), ("word", 1, 2.0, True), ("highlight", 3, 8.0, True)],
-    [("word", 2, 2.0, True), ("circle", 1, 4.0, True), ("highlight", 3, 4.0, False)],
+    (True, [("word", 1, 4.0, True), ("underline", 2, 2.0, True), ("word", 1, 2.0, True), ("highlight", 3, 8.0, True)]),
+    (False, [("word", 2, 2.0, True), ("circle", 1, 4.0, True), ("highlight", 3, 4.0, False)]),
 ]
-PRACTICE = [("word", 1, 4.0, True), ("underline", 2, 2.0, False)]
+PRACTICE = (True, [("word", 1, 4.0, True), ("underline", 2, 2.0, False)])
 MARK_LABEL = {"underline": "밑줄", "circle": "동그라미", "highlight": "칠하기", "word": "글씨"}
 PEN_LABEL = {1: "검정", 2: "빨강", 3: "형광펜"}
 
 
-def passage_steps(marks: list[tuple]) -> list[dict]:
-    """passage.js steps() 와 같은 규칙: 글씨 표시(+본문 복귀)를 먼저, 밑줄·동그라미·칠하기는 나중에."""
+def passage_steps(passage: tuple) -> list[dict]:
+    """passage.js steps() (515b823) 와 같은 규칙. 단계 = 참가자가 할 일 하나.
+
+    본문(밑줄·동그라미·칠하기 단어 포함)은 글씨 표시가 나올 때마다 끊어 return 단계가 되고,
+    글씨 표시와 번갈아 나온다. 밑줄·동그라미·칠하기는 그 뒤에 한꺼번에 온다.
+    펜 상태가 바로 앞과 같으면 no_change (블록 첫 본문이 그렇다).
+    """
+    starts_with_text, marks = passage
     sizes = dict(DEFAULT_SIZES)
     slot = BASE[0]
     out = []
 
     def require(want_slot, want_size, task_type):
         nonlocal slot
-        same_slot = want_slot == slot
-        if same_slot and sizes[slot] == want_size:
-            raise ValueError("바꿀 게 없는 단계")
-        kind = "size_only" if same_slot else ("switch_only" if sizes[want_slot] == want_size else "switch_size")
+        same_slot, same_size = want_slot == slot, sizes[want_slot] == want_size
+        kind = ("no_change" if same_slot and same_size else "size_only" if same_slot
+                else "switch_only" if same_size else "switch_size")
         slot = want_slot
         sizes[slot] = want_size
         out.append({"task_type": task_type, "step_type": kind, "slot": want_slot, "size": want_size})
 
-    words = [m for m in marks if m[0] == "word"]
-    others = [m for m in marks if m[0] != "word"]
-    for mark, s, z, text_after in words:
-        require(s, z, mark)
-        if text_after:
-            require(BASE[0], BASE[1], "return")
-    for mark, s, z, _ in others:
-        require(s, z, mark)
+    plan, others = [], []
+    text = starts_with_text                   # 아직 return 단계로 끊지 않은 본문이 있는지
+    for mark, s, z, text_after in marks:
+        if mark == "word":
+            if text:
+                plan.append(("return", *BASE))
+            plan.append((mark, s, z))
+            text = False
+        else:
+            others.append((mark, s, z))
+            text = True                       # 표시 단어도 본문으로 같이 쓴다
+        text = text or text_after
+    if text:
+        plan.append(("return", *BASE))
+    for task_type, s, z in plan + others:
+        require(s, z, task_type)
     for i, step in enumerate(out):
         step["step_id"] = f"{i + 1:02d}"
         label = f"{PEN_LABEL[step['slot']]} {step['size']:g}pt"
@@ -211,7 +225,7 @@ class BlockLog:
         self.rec_state("IDLE")
 
     def tune(self, n_touch: int, size: float | None) -> None:
-        """손가락이 정지한 채 펜 다운 → (끌기) → 펜 업. size 가 None 이면 끌지 않는다 (no_change)."""
+        """손가락이 정지한 채 펜 다운 → (끌기) → 펜 업. size 가 None 이면 끌지 않는다 (unchanged)."""
         self.wait(250)
         self.pointer("pointerdown", "pen", 1, 400, 300, n_touch=n_touch, n_still=n_touch)
         self.emit("activation", source="gesture", slot=self.slot, size=self.size, rec_state="ARMED",
@@ -273,15 +287,15 @@ def run_block(meta: dict, steps: list[dict], rng: random.Random, condition: str,
         sid = step["step_id"]
         if case.get("eraser") == sid:
             log.eraser()
-        if case.get("no_change") == sid:
+        if case.get("unchanged_gesture") == sid:
             log.gesture(1, None)                       # 굵기를 안 바꾼 제스처
         if case.get("penless") == sid:
             ids = log.fingers_down(3, True)            # 옷자락: 슬롯 3으로 바뀜, 펜 없이 뗌
             log.fingers_up(ids)
             log.gesture(1, None)                       # 손가락 1개로 검정으로 되돌림
         # 표시 앞의 본문: 블록 첫 표시가 맨 앞이면 없음, 본문 복귀 단계는 표시 단어를 마저 쓰는 획 1개
-        if index == 0 and case.get("starts_with_mark"):
-            n_body = 0
+        if (index == 0 and case.get("starts_with_mark")) or step["step_type"] == "no_change":
+            n_body = 0                                 # no_change 는 본문 첫 획이 곧 정답 획
         elif step["task_type"] == "return":
             n_body = 1
         elif prev == BASE:
@@ -328,12 +342,12 @@ def run_block(meta: dict, steps: list[dict], rng: random.Random, condition: str,
 
 
 CASES = {
-    ("P01", "C3", "exp2C_0"): {"wrong_fingers": "02", "missed": "04"},
-    ("P01", "C2", "exp2B_0"): {"no_change": "01"},
-    ("P02", "C3", "exp2C_0"): {"penless": "01"},
+    ("P01", "C3", "exp2C_0"): {"wrong_fingers": "03", "missed": "05"},
+    ("P01", "C2", "exp2B_0"): {"unchanged_gesture": "01"},
+    ("P02", "C3", "exp2C_0"): {"penless": "02"},
     ("P02", "C1", "exp2A_1"): {"early_done": "03"},
-    ("P03", "C2", "exp2C_0"): {"experimenter_skip": "03"},
-    ("P03", "C1", "exp2A_0"): {"eraser": "01"},
+    ("P03", "C2", "exp2C_0"): {"experimenter_skip": "04"},
+    ("P03", "C1", "exp2A_0"): {"eraser": "02"},
     ("P04", "C2", "exp2C_1"): {"cancel": "02"},
 }
 
@@ -351,9 +365,9 @@ def main(out: str) -> None:
     rng = random.Random(SEED)
     scripts = {}
     for variant in "ABC":
-        for i, marks in enumerate(PASSAGES):
+        for i, passage in enumerate(PASSAGES):
             script_id = f"exp2{variant}_{i}"
-            scripts[script_id] = passage_steps(marks)
+            scripts[script_id] = passage_steps(passage)
             _write(root / "scripts" / f"script_{script_id}.csv", SCRIPT_COLUMNS,
                    script_rows(script_id, scripts[script_id]))
     practice_steps = passage_steps(PRACTICE)

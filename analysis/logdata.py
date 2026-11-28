@@ -19,6 +19,7 @@ ACCEPTED_SCHEMA_VERSIONS = {"1.1", "1.2"}   # 나중에 로거가 1.2로 올려�
 KNOWN_BUILDS = {
     "exp-2026-11-18": "PR #10 / PR #11 초기 (11/20 파일럿). 단계별 60초 제한 있음",
     "exp-2026-11-21": "PR #11 f140813: 블록마다 저장, script 저장, 완료를 일찍 누르면 skipped. 60초 제한 있음",
+    "exp-2026-11-28": "PR #11 515b823: 단계 = 할 일 단위. 본문도 return 단계, 블록 첫 본문은 no_change. 60초 제한 아직 있음",
     "sample": "make_sample_data.py 가짜 데이터",
 }
 
@@ -55,7 +56,7 @@ APP_EVENTS = {
 CONDITIONS = {"C1", "C2", "C3"}
 PHASES = {"practice", "main"}
 EXPS = {"exp1", "exp2"}
-STEP_TYPES = {"switch_only", "size_only", "switch_size"}   # v1.2: copy 단계 없음
+STEP_TYPES = {"switch_only", "size_only", "switch_size", "no_change"}   # v1.2: copy 없음. no_change 는 515b823부터
 TASK_TYPES = {"underline", "circle", "highlight", "word", "return"}
 LANGUAGES = {"ko"}   # 11/4 결정: 한국어 고정. 열은 기록용으로 남긴다.
 OUTCOMES = {"completed", "timeout", "skipped"}   # timeout 은 시간 제한이 있던 build 에서만 나온다

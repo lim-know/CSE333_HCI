@@ -86,13 +86,15 @@ def replay(events: pd.DataFrame, still_px: float, still_ms: float,
 
 def with_step_kind(result: pd.DataFrame, steps: pd.DataFrame) -> pd.DataFrame:
     """펜 다운에 구간을 붙인다: switch(펜 상태를 바꾸는 중), writing(그 밖), no_script(단계표가 없는 연습 블록 등)."""
-    windows = steps[["session_id", "block", "step_id", "t_prev_ink_end", "t_first_correct"]]
+    windows = steps[["session_id", "block", "step_id", "t_prev_ink_end", "t_first_correct", "needs_change"]]
     merged = result.merge(windows, on=["session_id", "block", "step_id"], how="left")
     end = merged["t_first_correct"].fillna(np.inf)
-    in_switch = (merged["t_event"] > merged["t_prev_ink_end"]) & (merged["t_event"] <= end)
+    # 바꿀 게 없는 단계(no_change 등)는 전환 구간이 없다. 그 안의 제스처는 의도치 않은 쪽(writing)으로 본다
+    needs = merged["needs_change"].astype("boolean").fillna(True).astype(bool)
+    in_switch = (merged["t_event"] > merged["t_prev_ink_end"]) & (merged["t_event"] <= end) & needs
     merged["step_kind"] = np.select([merged["t_prev_ink_end"].isna(), in_switch],
                                     ["no_script", "switch"], default="writing")
-    return merged
+    return merged.drop(columns="needs_change")
 
 
 def interval_table(result: pd.DataFrame) -> pd.DataFrame:

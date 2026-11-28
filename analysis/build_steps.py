@@ -110,7 +110,7 @@ def _gesture_episodes(block: pd.DataFrame, strokes: pd.DataFrame) -> pd.DataFram
     """제스처 한 번 = 인식기가 IDLE 를 떠났다가 다시 IDLE 로 돌아올 때까지 (rec_state 이벤트).
 
     분류 (의도치 않은 발동 후보, analysis-plan.md 4.3):
-    - no_change : 펜을 댔지만(activation) 상태가 그대로. 획 하나가 제스처로 먹힌 경우일 수 있다
+    - unchanged : 펜을 댔지만(activation) 상태가 그대로. 획 하나가 제스처로 먹힌 경우일 수 있다
     - reverted : 상태가 바뀌었는데, 그 뒤 첫 획이 제스처 전 상태 (되돌려서 하던 필기를 이어감)
     - used : 상태가 바뀌었고 바뀐 상태(또는 다른 상태)로 다음 획을 썼다
     - rest : 손가락만 올렸다 뗐다 (activation 도 상태 변화도 없음). 세지 않는다
@@ -157,7 +157,7 @@ def _gesture_episodes(block: pd.DataFrame, strokes: pd.DataFrame) -> pd.DataFram
         changed = not same_state(ep["after"][0], ep["after"][1], ep["before"])
         later = strokes[strokes["t_start"] > ep["t_end"]] if np.isfinite(ep["t_end"]) else strokes.iloc[0:0]
         if not changed:
-            kind = "no_change" if ep["activation"] else "rest"
+            kind = "unchanged" if ep["activation"] else "rest"
         elif len(later) and same_state(later.iloc[0]["slot"], later.iloc[0]["size"], ep["before"]):
             kind = "reverted"
         else:
@@ -300,7 +300,7 @@ def _summarize_block(block: pd.DataFrame, spec: pd.DataFrame, meta: dict) -> lis
             "n_gestures": int((in_step["event"] == "gesture_commit").sum()),
             "n_gesture_used": int((step_eps["kind"] == "used").sum()),
             "n_gesture_reverted": int((step_eps["kind"] == "reverted").sum()),
-            "n_gesture_no_change": int((step_eps["kind"] == "no_change").sum()),
+            "n_gesture_unchanged": int((step_eps["kind"] == "unchanged").sum()),
             "n_penless_slot_change": int((step_eps["penless"].astype(bool) & (step_eps["kind"] != "used")).sum()),
             # 손가락이 닿아 있는데 정지로 판정되지 않은 펜 다운: 인식 실패 후보 (펜 pointerdown 줄의 n_still)
             "n_possible_missed": int(((pen_downs["n_touch"] >= 1) & (pen_downs["n_still"] == 0)).sum()),
